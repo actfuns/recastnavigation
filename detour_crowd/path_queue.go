@@ -54,6 +54,7 @@ func (q *PathQueue) Init(maxPathSize int, maxSearchNodeCount int, nav NavMeshQue
 func (q *PathQueue) Update(maxIters int) {
 	const maxKeepAlive = 2
 
+	iterCount := 0
 	for i := 0; i < pathQueueMaxQueue; i++ {
 		pq := &q.queue[q.queueHead%pathQueueMaxQueue]
 
@@ -63,12 +64,15 @@ func (q *PathQueue) Update(maxIters int) {
 			continue
 		}
 
-		// Handle completed/failed request (terminal error, not "in progress").
-		if pq.err != nil && pq.err != detour.ErrInProgress {
+		// Handle completed/failed request (terminal state, not "in progress").
+		// Terminal states: non-ErrInProgress error (failure/partial), or
+		// nil error with npath > 0 (successfully completed).
+		if (pq.err != nil && pq.err != detour.ErrInProgress) || (pq.err == nil && pq.npath > 0) {
 			pq.keepAlive++
 			if pq.keepAlive > maxKeepAlive {
 				pq.ref = 0
 				pq.err = nil
+				pq.npath = 0
 			}
 			q.queueHead++
 			continue
@@ -81,7 +85,14 @@ func (q *PathQueue) Update(maxIters int) {
 
 		// Handle query in progress.
 		if errors.Is(pq.err, detour.ErrInProgress) {
-			pq.err = q.navquery.UpdateSlicedPath(maxIters)
+			itersLeft := maxIters - iterCount
+			if itersLeft <= 0 {
+				break
+			}
+			pq.err = q.navquery.UpdateSlicedPath(itersLeft)
+			if errors.Is(pq.err, detour.ErrInProgress) {
+				iterCount++
+			}
 		}
 
 		// Handle query complete.

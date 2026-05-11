@@ -2,8 +2,9 @@ package detour_crowd
 
 import (
 	"errors"
-	"github.com/actfuns/recastnavigation/detour"
 	"math"
+
+	"github.com/actfuns/recastnavigation/detour"
 )
 
 const (
@@ -422,8 +423,10 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 
 			// Adjust the path over the off-mesh connection.
 			var refs [2]PolyRef
-			if ag.corridor.MoveOverOffmeshConnection(ag.cornerPolys[ag.ncorners-1], &refs,
-				anim.StartPos, anim.EndPos, c.navquery) {
+			startPos, endPos, ok := ag.corridor.MoveOverOffmeshConnection(ag.cornerPolys[ag.ncorners-1], &refs, c.navquery)
+			if ok {
+				anim.StartPos = startPos
+				anim.EndPos = endPos
 				anim.InitPos = ag.npos
 				anim.PolyRef = int64(refs[1])
 				anim.Active = true
@@ -753,7 +756,7 @@ func (c *Crowd) getFilter(queryFilterType uint8) *QueryFilter {
 	return nil
 }
 
-func (c *Crowd) updateMoveRequest(dt float32) {
+func (c *Crowd) updateMoveRequest(_ float32) {
 	const pathMaxAgents = 8
 	queue := make([]*CrowdAgent, 0, pathMaxAgents)
 
@@ -857,7 +860,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 					ag.targetState = CrowdAgentTargetFailed
 				}
 				ag.targetReplanTime = 0
-			} else if err == nil {
+			} else {
 				path := ag.corridor.GetPath()
 				npath := ag.corridor.GetPathCount()
 
@@ -1056,10 +1059,7 @@ func (c *Crowd) checkPathValidity(agents []*CrowdAgent, nagents int, dt float32)
 	}
 }
 
-func (c *Crowd) getNeighbours(pos [3]float32, height, range_ float32,
-	skip *CrowdAgent, result []CrowdNeighbour, maxResult int,
-	agents []*CrowdAgent, nagents int, grid *ProximityGrid) int {
-
+func (c *Crowd) getNeighbours(pos [3]float32, height, range_ float32, skip *CrowdAgent, result []CrowdNeighbour, maxResult int, agents []*CrowdAgent, _ int, grid *ProximityGrid) int {
 	n := 0
 	const maxNeis = 32
 	ids := make([]uint16, maxNeis)

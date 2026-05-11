@@ -1181,26 +1181,26 @@ func (m *NavMesh) GetPolyRefBase(tile *MeshTile) PolyRef {
 }
 
 // GetOffMeshConnectionPolyEndPoints gets the end points of an off-mesh connection.
-func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, startPos, endPos [3]float32) error {
+func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef) ([3]float32, [3]float32, error) {
 	if polyRef == 0 {
-		return ErrFailure
+		return [3]float32{}, [3]float32{}, ErrFailure
 	}
 
 	salt, it, ip := m.DecodePolyID(polyRef)
 	if int(it) >= m.MaxTiles {
-		return ErrInvalidParam
+		return [3]float32{}, [3]float32{}, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return ErrInvalidParam
+		return [3]float32{}, [3]float32{}, ErrInvalidParam
 	}
 	tile := &m.Tiles[it]
 	if int(ip) >= int(tile.Header.PolyCount) {
-		return ErrInvalidParam
+		return [3]float32{}, [3]float32{}, ErrInvalidParam
 	}
 	poly := &tile.Polys[ip]
 
 	if poly.GetType() != PolyTypeOffMeshConnection {
-		return ErrFailure
+		return [3]float32{}, [3]float32{}, ErrFailure
 	}
 
 	idx0, idx1 := 0, 1
@@ -1216,15 +1216,11 @@ func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, st
 	}
 
 	verts0 := tile.Verts[poly.Verts[idx0]*3 : poly.Verts[idx0]*3+3]
-	startPos[0] = verts0[0]
-	startPos[1] = verts0[1]
-	startPos[2] = verts0[2]
+	startPos := Vcopy(verts0)
 	verts1 := tile.Verts[poly.Verts[idx1]*3 : poly.Verts[idx1]*3+3]
-	endPos[0] = verts1[0]
-	endPos[1] = verts1[1]
-	endPos[2] = verts1[2]
+	endPos := Vcopy(verts1)
 
-	return nil
+	return startPos, endPos, nil
 }
 
 // GetOffMeshConnectionByRef gets the specified off-mesh connection.

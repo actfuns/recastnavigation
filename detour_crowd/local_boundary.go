@@ -87,8 +87,8 @@ func (b *LocalBoundary) Update(ref PolyRef, pos [3]float32, collisionQueryRange 
 
 	// First query non-overlapping polygons.
 	var nresult int
-	nresult, _ = navquery.FindPolysAroundCircle(ref, pos, collisionQueryRange,
-		filter, b.polys[:], nil, nil, maxLocalPolys)
+	nresult, _ = navquery.FindLocalNeighbourhood(ref, pos, collisionQueryRange,
+		filter, b.polys[:], nil, maxLocalPolys)
 	b.npolys = nresult
 
 	// Secondly, store all polygon edges.

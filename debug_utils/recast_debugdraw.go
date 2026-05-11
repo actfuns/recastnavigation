@@ -152,11 +152,12 @@ func DebugDrawHeightfieldWalkable(dd DebugDraw, hf *recast.Heightfield) {
 			fz := orig[2] + float32(y)*cs
 			s := hf.Spans[x+y*w]
 			for s != nil {
-				if s.Area == recast.WalkableArea {
+				switch s.Area {
+				case recast.WalkableArea:
 					fcol[0] = RGBA(64, 128, 160, 255)
-				} else if s.Area == recast.NullArea {
+				case recast.NullArea:
 					fcol[0] = RGBA(64, 64, 64, 255)
-				} else {
+				default:
 					fcol[0] = MultCol(dd.AreaToCol(s.Area), 200)
 				}
 				AppendBox(dd, fx, orig[1]+float32(s.Smin)*ch, fz, fx+cs, orig[1]+float32(s.Smax)*ch, fz+cs, fcol[:])
@@ -188,11 +189,12 @@ func DebugDrawCompactHeightfieldSolid(dd DebugDraw, chf *recast.CompactHeightfie
 				s := chf.Spans[i]
 				area := chf.Areas[i]
 				var color uint32
-				if area == recast.WalkableArea {
+				switch area {
+				case recast.WalkableArea:
 					color = RGBA(0, 192, 255, 64)
-				} else if area == recast.NullArea {
+				case recast.NullArea:
 					color = RGBA(0, 0, 0, 64)
-				} else {
+				default:
 					color = dd.AreaToCol(uint32(area))
 				}
 
@@ -353,11 +355,12 @@ func DebugDrawHeightfieldLayer(dd DebugDraw, layer *recast.HeightfieldLayer, idx
 			}
 			area := layer.Areas[lidx]
 			var col uint32
-			if area == recast.WalkableArea {
+			switch area {
+			case recast.WalkableArea:
 				col = LerpCol(color, RGBA(0, 192, 255, 64), 32)
-			} else if area == recast.NullArea {
+			case recast.NullArea:
 				col = LerpCol(color, RGBA(0, 0, 0, 64), 32)
-			} else {
+			default:
 				col = LerpCol(color, dd.AreaToCol(uint32(area)), 32)
 			}
 
@@ -599,11 +602,12 @@ func DebugDrawPolyMesh(dd DebugDraw, mesh *recast.PolyMesh) {
 		area := mesh.Areas[i]
 
 		var color uint32
-		if area == recast.WalkableArea {
+		switch area {
+		case recast.WalkableArea:
 			color = RGBA(0, 192, 255, 120) // Increased alpha for better visibility
-		} else if area == recast.NullArea {
+		case recast.NullArea:
 			color = RGBA(0, 0, 0, 120)
-		} else {
+		default:
 			color = dd.AreaToCol(uint32(area))
 		}
 

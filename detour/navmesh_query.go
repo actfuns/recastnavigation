@@ -120,7 +120,7 @@ func (f *QueryFilter) PassFilter(ref PolyRef, tile *MeshTile, poly *Poly) bool {
 	if poly.Flags&f.ExcludeFlags != 0 {
 		return false
 	}
-	if poly.Flags&f.IncludeFlags != f.IncludeFlags {
+	if poly.Flags&f.IncludeFlags == 0 {
 		return false
 	}
 	return true
@@ -207,6 +207,7 @@ func (q *NavMeshQuery) FindPath(startRef, endRef PolyRef, startPos, endPos [3]fl
 		return nil, 0, ErrOutOfNodes
 	}
 	startNode.Pidx = 0
+	startNode.Pos = startPos
 	startNode.Cost = 0
 	startNode.Total = Vdist(startPos, endPos) * H_SCALE
 	startNode.ID = startRef
@@ -426,21 +427,21 @@ func (q *NavMeshQuery) getPortalPoints(from, to PolyRef, fromTile, toTile *MeshT
 			// If the link is at tile boundary, clamp the vertices to the link width.
 			if fromTile.Links[l].Side != 0xff {
 				if fromTile.Links[l].Bmin != 0 || fromTile.Links[l].Bmax != 255 {
-					s := 1.0 / 255.0
+					s := float32(1.0 / 255.0)
 					tmin := float32(fromTile.Links[l].Bmin) * float32(s)
 					tmax := float32(fromTile.Links[l].Bmax) * float32(s)
-						var va3, vb3 [3]float32
-						copy(va3[:], fromTile.Verts[fromPoly.Verts[va]*3:fromPoly.Verts[va]*3+3])
-						copy(vb3[:], fromTile.Verts[fromPoly.Verts[vb]*3:fromPoly.Verts[vb]*3+3])
-						left = Vlerp(va3, vb3, tmin)
-						right = Vlerp(va3, vb3, tmax)
-					}
+					var va3, vb3 [3]float32
+					copy(va3[:], fromTile.Verts[fromPoly.Verts[va]*3:fromPoly.Verts[va]*3+3])
+					copy(vb3[:], fromTile.Verts[fromPoly.Verts[vb]*3:fromPoly.Verts[vb]*3+3])
+					left = Vlerp(va3, vb3, tmin)
+					right = Vlerp(va3, vb3, tmax)
 				}
-				return left, right, true
 			}
+			return left, right, true
 		}
-		return [3]float32{}, [3]float32{}, false
 	}
+	return [3]float32{}, [3]float32{}, false
+}
 
 // triArea2D calculates signed triangle area in 2D (XZ plane)
 // Matches C++ triArea2D: (c-a)x(b-a) = acx*abz - abx*acz
@@ -457,10 +458,11 @@ func appendVertex(pos [3]float32, flags uint8, ref PolyRef,
 	straightPath []float32, straightPathFlags []uint8, straightPathRefs []PolyRef,
 	straightPathCount *int, maxStraightPath int) error {
 
-	// If pos equals last vertex, just update flags and ref (no duplicate)
+	// If pos equals last vertex (epsilon comparison), just update flags and ref (no duplicate)
 	if *straightPathCount > 0 {
 		lastIdx := (*straightPathCount - 1) * 3
-		if straightPath[lastIdx] == pos[0] && straightPath[lastIdx+1] == pos[1] && straightPath[lastIdx+2] == pos[2] {
+		lastPos := [3]float32{straightPath[lastIdx], straightPath[lastIdx+1], straightPath[lastIdx+2]}
+		if Vequal(lastPos, pos) {
 			if straightPathFlags != nil {
 				straightPathFlags[*straightPathCount-1] = flags
 			}
@@ -797,18 +799,21 @@ func (q *NavMeshQuery) FindStraightPath(startPos, endPos [3]float32, path []Poly
 
 // MoveAlongSurface moves from the start position along the surface to find a position
 // constrained by the navigation mesh.
+// Uses BFS with a simple stack (matching C++ dtNavMeshQuery::moveAlongSurface).
 func (q *NavMeshQuery) MoveAlongSurface(startRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, result []float32, visited []PolyRef, maxVisitedSize int) (int, error) {
-	if startRef == 0 {
+	if startRef == 0 || filter == nil || result == nil || maxVisitedSize <= 0 {
 		return 0, ErrInvalidParam
 	}
-	if filter == nil {
+	if !Visfinite(startPos) || !Visfinite(endPos) {
 		return 0, ErrInvalidParam
 	}
 
-	q.NodePool.Clear()
-	q.OpenList.Clear()
+	q.TinyNodePool.Clear()
 
-	startNode := q.NodePool.GetNode(startRef, 0)
+	const maxStack = 48
+	stack := make([]*Node, 0, maxStack)
+
+	startNode := q.TinyNodePool.GetNode(startRef, 0)
 	if startNode == nil {
 		return 0, ErrOutOfNodes
 	}
@@ -816,262 +821,395 @@ func (q *NavMeshQuery) MoveAlongSurface(startRef PolyRef, startPos, endPos [3]fl
 	startNode.Cost = 0
 	startNode.Total = 0
 	startNode.ID = startRef
-	startNode.Flags = NodeOpen
-	q.OpenList.Push(startNode)
+	startNode.Flags = NodeClosed
+	stack = append(stack, startNode)
 
-	bestNode := startNode
+	bestPos := startPos
 	bestDist := float32(math.MaxFloat32)
+	var bestNode *Node
 
-	for !q.OpenList.Empty() {
-		bestNode = q.OpenList.Pop()
-		bestNode.Flags &= ^uint8(0) ^ NodeOpen
-		bestNode.Flags |= NodeClosed
+	// Search constraints.
+	searchPos := Vlerp(startPos, endPos, 0.5)
+	searchRadSqr := Vdist(startPos, endPos)
+	searchRadSqr = searchRadSqr/2.0 + 0.001
+	searchRadSqr *= searchRadSqr
 
-		tile, poly, _ := q.Nav.GetTileAndPolyByRef(bestNode.ID)
+	var verts [VertsPerPolygon * 3]float32
 
-		// Check distance to end point
-		var closestPt [3]float32
-		closestPt, _ = q.Nav.closestPointOnPoly(bestNode.ID, endPos)
-		dist := Vdist2DSqr(closestPt, endPos)
-		if dist < bestDist {
-			bestDist = dist
+	for len(stack) > 0 {
+		// Pop front.
+		curNode := stack[0]
+		stack = stack[1:]
+
+		// Get poly and tile.
+		curRef := curNode.ID
+		curTile, curPoly := q.Nav.GetTileAndPolyByRefUnsafe(curRef)
+
+		// Collect vertices.
+		nverts := int(curPoly.VertCount)
+		for i := 0; i < nverts; i++ {
+			copy(verts[i*3:i*3+3], curTile.Verts[curPoly.Verts[i]*3:curPoly.Verts[i]*3+3])
 		}
 
-		// Expand neighbours
-		for l := poly.FirstLink; l != NullLink; l = tile.Links[l].Next {
-			link := &tile.Links[l]
-			if link.Ref == 0 {
-				continue
-			}
-			neiTile, neiPoly := q.Nav.GetTileAndPolyByRefUnsafe(link.Ref)
-			if !filter.PassFilter(link.Ref, neiTile, neiPoly) {
-				continue
-			}
-
-			nei := q.NodePool.GetNode(link.Ref, 0)
-			if nei == nil {
-				continue
-			}
-			if nei.Flags&NodeClosed != 0 {
-				continue
-			}
-
-			// Heuristic: distance from neighbour to end
-			var closestNeiPt [3]float32
-			closestNeiPt, _ = q.Nav.closestPointOnPoly(link.Ref, endPos)
-			neiDist := Vdist2DSqr(closestNeiPt, endPos)
-
-			if (nei.Flags & NodeOpen) != 0 {
-				if nei.Total > neiDist {
-					nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-					nei.Total = neiDist
-					nei.ID = link.Ref
-					q.OpenList.Modify(nei)
-				}
-			} else {
-				nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-				nei.Total = neiDist
-				nei.ID = link.Ref
-				nei.Flags = NodeOpen
-				q.OpenList.Push(nei)
-			}
-		}
-	}
-
-	// Build result
-	var pts [256]float32
-	npts := 0
-
-	// Walk from best node back to start
-	node := bestNode
-	for node != nil && npts < 128 {
-		var pt [3]float32
-		if node.ID == startRef {
-			copy(pt[:], startPos[:])
-		} else {
-			tile, poly := q.Nav.GetTileAndPolyByRefUnsafe(node.ID)
-			pt = CalcPolyCenter(poly.Verts[:poly.VertCount], tile.Verts)
-			pt[1] = startPos[1]
-		}
-		// Insert at beginning
-		for k := npts * 3; k >= 3; k-- {
-			pts[k] = pts[k-3]
-		}
-		copy(pts[:], pt[:])
-		npts++
-
-		if node.Pidx == 0 {
+		// If target is inside the poly, stop search.
+		if PointInPolygon(endPos, verts[:], nverts) {
+			bestNode = curNode
+			bestPos = endPos
 			break
 		}
-		node = q.NodePool.GetNodeAtIdx(node.Pidx)
-	}
 
-	if npts > 0 {
-		copy(result, pts[npts*3-3:])
-	}
+		// Find wall edges and find nearest point inside the walls.
+		for i, j := 0, nverts-1; i < nverts; j, i = i, i+1 {
+			// Find links to neighbours.
+			const maxNeis = 8
+			neis := make([]PolyRef, 0, maxNeis)
 
-	// Save visited polygons
-	nvisited := 0
-	if visited != nil {
-		node = bestNode
-		for node != nil && nvisited < maxVisitedSize {
-			visited[nvisited] = node.ID
-			nvisited++
-			if node.Pidx == 0 {
-				break
+			if curPoly.Neis[j]&ExtLink != 0 {
+				// Tile border.
+				for l := curPoly.FirstLink; l != NullLink; l = curTile.Links[l].Next {
+					link := &curTile.Links[l]
+					if int(link.Edge) == j {
+						if link.Ref != 0 {
+							neiTile, neiPoly := q.Nav.GetTileAndPolyByRefUnsafe(link.Ref)
+							if filter.PassFilter(link.Ref, neiTile, neiPoly) {
+								if len(neis) < maxNeis {
+									neis = append(neis, link.Ref)
+								}
+							}
+						}
+					}
+				}
+			} else if curPoly.Neis[j] != 0 {
+				// Internal edge.
+				idx := uint32(curPoly.Neis[j] - 1)
+				ref := q.Nav.GetPolyRefBase(curTile) | PolyRef(idx)
+				if filter.PassFilter(ref, curTile, &curTile.Polys[idx]) {
+					neis = append(neis, ref)
+				}
 			}
-			node = q.NodePool.GetNodeAtIdx(node.Pidx)
-		}
-		// Reverse
-		for i, j := 0, nvisited-1; i < j; i, j = i+1, j-1 {
-			visited[i], visited[j] = visited[j], visited[i]
+
+			if len(neis) == 0 {
+				// Wall edge, calc distance.
+				vj := Vcopy(verts[j*3 : j*3+3])
+				vi := Vcopy(verts[i*3 : i*3+3])
+				distSqr, tseg := DistancePtSegSqr2D(endPos, vj, vi)
+				if distSqr < bestDist {
+					// Update nearest distance.
+					bestPos = Vlerp(vj, vi, tseg)
+					bestDist = distSqr
+					bestNode = curNode
+				}
+			} else {
+				for k := 0; k < len(neis); k++ {
+					// Skip if no node can be allocated.
+					neighbourNode := q.TinyNodePool.GetNode(neis[k], 0)
+					if neighbourNode == nil {
+						continue
+					}
+					// Skip if already visited.
+					if neighbourNode.Flags&NodeClosed != 0 {
+						continue
+					}
+
+					// Skip the link if it is too far from search constraint.
+					vj := Vcopy(verts[j*3 : j*3+3])
+					vi := Vcopy(verts[i*3 : i*3+3])
+					distSqr, _ := DistancePtSegSqr2D(searchPos, vj, vi)
+					if distSqr > searchRadSqr {
+						continue
+					}
+
+					// Mark as the node as visited and push to queue.
+					if len(stack) < maxStack {
+						neighbourNode.Pidx = q.TinyNodePool.GetNodeIdx(curNode)
+						neighbourNode.Flags |= NodeClosed
+						stack = append(stack, neighbourNode)
+					}
+				}
+			}
 		}
 	}
 
-	return nvisited, nil
+	// Build result path (polygon centers + bestPos at the end).
+	n := 0
+	if bestNode != nil {
+		// Reverse the path from bestNode to start using pidx.
+		var prev *Node
+		node := bestNode
+		for node != nil {
+			next := q.TinyNodePool.GetNodeAtIdx(node.Pidx)
+			node.Pidx = q.TinyNodePool.GetNodeIdx(prev)
+			prev = node
+			node = next
+		}
+
+		// Store result: position for each visited polygon (startPos for start, center for others).
+		node = prev
+		pathIdx := 0
+		for node != nil && pathIdx < maxVisitedSize {
+			visited[pathIdx] = node.ID
+
+			var pt [3]float32
+			if node.ID == startRef {
+				pt = startPos
+			} else {
+				tile, poly := q.Nav.GetTileAndPolyByRefUnsafe(node.ID)
+				pt = CalcPolyCenter(poly.Verts[:poly.VertCount], tile.Verts)
+				pt[1] = startPos[1]
+			}
+			copy(result[pathIdx*3:], pt[:])
+
+			pathIdx++
+			node = q.TinyNodePool.GetNodeAtIdx(node.Pidx)
+		}
+
+		// Overwrite the last position with bestPos (closest to endPos).
+		if pathIdx > 0 {
+			copy(result[(pathIdx-1)*3:], bestPos[:])
+		}
+
+		n = pathIdx
+	}
+
+	return n, nil
 }
 
 // Raycast performs a raycast along the navigation mesh surface.
+// Uses dtIntersectSegmentPoly2D-style polygon edge walking
+// (matching C++ dtNavMeshQuery::raycast).
 func (q *NavMeshQuery) Raycast(startRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32, prevRef PolyRef, hit *RaycastHit) error {
-	if startRef == 0 {
+	if startRef == 0 || filter == nil || hit == nil {
 		return ErrInvalidParam
 	}
-	if filter == nil {
+	if !Visfinite(startPos) || !Visfinite(endPos) {
 		return ErrInvalidParam
 	}
-	if hit == nil {
+	if prevRef != 0 && !q.Nav.IsValidPolyRef(prevRef) {
 		return ErrInvalidParam
 	}
 
 	hit.T = 0
-	hit.HitNormal[0] = 0
-	hit.HitNormal[1] = 0
-	hit.HitNormal[2] = 0
-	hit.HitCount = 0
+	hit.HitNormal = [3]float32{}
 	hit.PathCount = 0
-	hit.Pos[0] = endPos[0]
-	hit.Pos[1] = endPos[1]
-	hit.Pos[2] = endPos[2]
+	hit.PathCost = 0
 
-	curRef := startRef
+	dir := Vsub(endPos, startPos)
 	curPos := startPos
+	curRef := startRef
 	curTile, curPoly := q.Nav.GetTileAndPolyByRefUnsafe(curRef)
 
-	t := float32(0)
+	var prevTile *MeshTile
+	var prevPoly *Poly
+	if prevRef != 0 {
+		prevTile, prevPoly = q.Nav.GetTileAndPolyByRefUnsafe(prevRef)
+	} else {
+		prevTile = curTile
+		prevPoly = curPoly
+	}
 
-	for {
-		// Check if we hit the end
-		if t >= 1 {
-			break
+	var verts [(VertsPerPolygon + 1) * 3]float32
+	status := error(nil)
+	n := 0
+
+	for curRef != 0 {
+		// Collect vertices of current polygon.
+		nv := int(curPoly.VertCount)
+		for i := 0; i < nv; i++ {
+			copy(verts[i*3:i*3+3], curTile.Verts[curPoly.Verts[i]*3:curPoly.Verts[i]*3+3])
 		}
 
-		nv := int(curPoly.VertCount)
-		for i, j := 0, nv-1; i < nv; j, i = i, i+1 {
-			// Skip if this edge has no connection
-			if curPoly.Neis[i] == 0 {
+		// Cast ray against current polygon.
+		hitRes, _, tmax, _, segMax := IntersectSegmentPoly2D(startPos, endPos, verts[:], nv)
+		if !hitRes {
+			// Could not hit the polygon, keep the old t and report hit.
+			hit.PathCount = n
+			return status
+		}
+
+		hit.HitEdgeIndex = segMax
+
+		// Keep track of furthest t so far.
+		if tmax > hit.T {
+			hit.T = tmax
+		}
+
+		// Store visited polygons.
+		if n < MaxRaycastPathSize {
+			hit.Path[n] = curRef
+			n++
+		} else {
+			status = ErrBufferTooSmall
+		}
+
+		// Ray end is completely inside the polygon.
+		if segMax == -1 {
+			hit.T = float32(math.MaxFloat32)
+			hit.PathCount = n
+
+			// Add the cost.
+			if options&RaycastUseCosts != 0 {
+				hit.PathCost += filter.GetCost(curPos, endPos, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, curRef, curTile, curPoly)
+			}
+			return status
+		}
+
+		// Follow neighbours.
+		var nextRef PolyRef
+		var nextTile *MeshTile
+		var nextPoly *Poly
+
+		for l := curPoly.FirstLink; l != NullLink; l = curTile.Links[l].Next {
+			link := &curTile.Links[l]
+
+			// Find link which contains this edge.
+			if int(link.Edge) != segMax {
 				continue
 			}
 
-				var va, vb [3]float32
-				copy(va[:], curTile.Verts[curPoly.Verts[i]*3:curPoly.Verts[i]*3+3])
-				copy(vb[:], curTile.Verts[curPoly.Verts[j]*3:curPoly.Verts[j]*3+3])
+			// Get pointer to the next polygon.
+			nextTile, nextPoly = q.Nav.GetTileAndPolyByRefUnsafe(link.Ref)
 
-				// Check if the ray segment intersects this edge
-				ok, s, _ := IntersectSegSeg2D(startPos, endPos, va, vb)
-
-			// Check if the ray segment intersects this edge
-			if !ok || s <= t || s >= 1 {
+			// Skip off-mesh connections.
+			if nextPoly.GetType() == PolyTypeOffMeshConnection {
 				continue
 			}
 
-			// Check if the edge is between the start and current position
-			dir := endPos[0] - startPos[0]
-			if dir*(va[2]-curPos[2]) > dir*(vb[2]-curPos[2]) {
+			// Skip links based on filter.
+			if !filter.PassFilter(link.Ref, nextTile, nextPoly) {
 				continue
 			}
 
-			// Cross the edge to the neighbour polygon
-			var neiRef PolyRef
-			neiFound := false
-			for l := curPoly.FirstLink; l != NullLink; l = curTile.Links[l].Next {
-				if curTile.Links[l].Edge == uint8(i) {
-					neiRef = curTile.Links[l].Ref
-					neiFound = true
+			// If the link is internal, just return the ref.
+			if link.Side == 0xff {
+				nextRef = link.Ref
+				break
+			}
+
+			// If the link is at tile boundary,
+			// Check if the link spans the whole edge, and accept.
+			if link.Bmin == 0 && link.Bmax == 255 {
+				nextRef = link.Ref
+				break
+			}
+
+			// Check for partial edge links.
+			v0 := curPoly.Verts[link.Edge]
+			v1 := curPoly.Verts[(link.Edge+1)%uint8(curPoly.VertCount)]
+			left := Vcopy(curTile.Verts[v0*3 : v0*3+3])
+			right := Vcopy(curTile.Verts[v1*3 : v1*3+3])
+
+			// Check that the intersection lies inside the link portal.
+			if link.Side == 0 || link.Side == 4 {
+				// Calculate link size.
+				s := float32(1.0 / 255.0)
+				lmin := left[2] + (right[2]-left[2])*(float32(link.Bmin)*s)
+				lmax := left[2] + (right[2]-left[2])*(float32(link.Bmax)*s)
+				if lmin > lmax {
+					lmin, lmax = lmax, lmin
+				}
+				// Find Z intersection.
+				z := startPos[2] + (endPos[2]-startPos[2])*tmax
+				if z >= lmin && z <= lmax {
+					nextRef = link.Ref
+					break
+				}
+			} else if link.Side == 2 || link.Side == 6 {
+				// Calculate link size.
+				s := float32(1.0 / 255.0)
+				lmin := left[0] + (right[0]-left[0])*(float32(link.Bmin)*s)
+				lmax := left[0] + (right[0]-left[0])*(float32(link.Bmax)*s)
+				if lmin > lmax {
+					lmin, lmax = lmax, lmin
+				}
+				// Find X intersection.
+				x := startPos[0] + (endPos[0]-startPos[0])*tmax
+				if x >= lmin && x <= lmax {
+					nextRef = link.Ref
 					break
 				}
 			}
-
-			if !neiFound {
-				continue
-			}
-
-			neiTile, neiPoly := q.Nav.GetTileAndPolyByRefUnsafe(neiRef)
-_, _ = q.Nav.closestPointOnPoly(neiRef, curPos)
-
-			// Check if the polygon passes the filter
-			if !filter.PassFilter(neiRef, neiTile, neiPoly) {
-				// Hit a wall
-				hit.T = s
-				hit.Pos = Vlerp(startPos, endPos, s)
-				hit.HitNormal[0] = -(vb[2] - va[2])
-				hit.HitNormal[1] = 0
-				hit.HitNormal[2] = vb[0] - va[0]
-				hit.HitNormal = Vnormalize(hit.HitNormal)
-
-				if hit.PathCount < MaxRaycastPathSize {
-					hit.Path[hit.PathCount] = curRef
-					hit.PathCount++
-				}
-				hit.HitCount++
-				return nil
-			}
-
-			// Move to neighbour
-			t = s
-			curPos[0] = startPos[0] + (endPos[0]-startPos[0])*t
-			curPos[1] = startPos[1] + (endPos[1]-startPos[1])*t
-			curPos[2] = startPos[2] + (endPos[2]-startPos[2])*t
-
-			curRef = neiRef
-			curTile = neiTile
-			curPoly = neiPoly
-
-			if hit.PathCount < MaxRaycastPathSize {
-				hit.Path[hit.PathCount] = curRef
-				hit.PathCount++
-			}
-
-			break
 		}
+
+		// Add cost.
+		if options&RaycastUseCosts != 0 {
+			lastPos := curPos
+			curPos = Vmad(startPos, dir, hit.T)
+			// Correct height.
+			e1 := Vcopy(verts[segMax*3 : segMax*3+3])
+			e2Idx := (segMax + 1) % nv
+			e2 := Vcopy(verts[e2Idx*3 : e2Idx*3+3])
+			eDir := Vsub(e2, e1)
+			diff := Vsub(curPos, e1)
+			var s float32
+			if eDir[0]*eDir[0] > eDir[2]*eDir[2] {
+				s = diff[0] / eDir[0]
+			} else {
+				s = diff[2] / eDir[2]
+			}
+			curPos[1] = e1[1] + eDir[1]*s
+
+			hit.PathCost += filter.GetCost(lastPos, curPos, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly)
+		}
+
+		if nextRef == 0 {
+			// No neighbour, we hit a wall.
+			// Calculate hit normal.
+			a := segMax
+			b := segMax + 1
+			if b >= nv {
+				b = 0
+			}
+			va := Vcopy(verts[a*3 : a*3+3])
+			vb := Vcopy(verts[b*3 : b*3+3])
+			dx := vb[0] - va[0]
+			dz := vb[2] - va[2]
+			hit.HitNormal = Vnormalize([3]float32{dz, 0, -dx})
+
+			hit.PathCount = n
+			return status
+		}
+
+		// Move to next polygon.
+		prevRef = curRef
+		prevTile = curTile
+		prevPoly = curPoly
+		curRef = nextRef
+		curTile = nextTile
+		curPoly = nextPoly
 	}
 
-	hit.T = 1
-	copy(hit.Pos[:], endPos[:])
-	return nil
+	hit.PathCount = n
+	return status
 }
 
 // RaycastHit stores the result of a raycast operation.
 type RaycastHit struct {
-	T         float32
-	HitNormal [3]float32
-	HitCount  int
-	Path      [MaxRaycastPathSize]PolyRef
-	PathCount int
-	Pos       [3]float32
-	Cost      float32
+	T            float32
+	HitNormal    [3]float32
+	HitCount     int
+	Path         [MaxRaycastPathSize]PolyRef
+	PathCount    int
+	Pos          [3]float32
+	Cost         float32
+	PathCost     float32
+	HitEdgeIndex int
 }
 
 const MaxRaycastPathSize = 256
 
 // FindPolysAroundCircle finds polygons within a circle around a position.
+// Uses Dijkstra expansion (matching C++ dtNavMeshQuery::findPolysAroundCircle).
 func (q *NavMeshQuery) FindPolysAroundCircle(startRef PolyRef, centerPos [3]float32, radius float32, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, resultCost []float32, maxResult int) (int, error) {
 	if startRef == 0 {
 		return 0, ErrInvalidParam
 	}
-	if filter == nil {
+	if !Visfinite(centerPos) {
 		return 0, ErrInvalidParam
 	}
-	if maxResult <= 0 {
+	if radius < 0 {
+		return 0, ErrInvalidParam
+	}
+	if filter == nil || maxResult < 0 {
 		return 0, ErrInvalidParam
 	}
 
@@ -1082,6 +1220,7 @@ func (q *NavMeshQuery) FindPolysAroundCircle(startRef PolyRef, centerPos [3]floa
 	if startNode == nil {
 		return 0, ErrOutOfNodes
 	}
+	startNode.Pos = centerPos
 	startNode.Pidx = 0
 	startNode.Cost = 0
 	startNode.Total = 0
@@ -1089,100 +1228,148 @@ func (q *NavMeshQuery) FindPolysAroundCircle(startRef PolyRef, centerPos [3]floa
 	startNode.Flags = NodeOpen
 	q.OpenList.Push(startNode)
 
-	radiusSqr := radius * radius
-
+	status := error(nil)
 	n := 0
-	if n < maxResult {
-		resultRef[n] = startRef
-		resultParent[n] = 0
-		resultCost[n] = 0
-		n++
-	}
+	radiusSqr := radius * radius
 
 	for !q.OpenList.Empty() {
 		bestNode := q.OpenList.Pop()
 		bestNode.Flags &= ^uint8(0) ^ NodeOpen
 		bestNode.Flags |= NodeClosed
 
-		tile, poly, _ := q.Nav.GetTileAndPolyByRef(bestNode.ID)
+		// Get poly and tile.
+		bestRef := bestNode.ID
+		bestTile, bestPoly := q.Nav.GetTileAndPolyByRefUnsafe(bestRef)
 
-		for l := poly.FirstLink; l != NullLink; l = tile.Links[l].Next {
-			link := &tile.Links[l]
-			if link.Ref == 0 {
+		// Get parent poly and tile.
+		parentRef := PolyRef(0)
+		var parentTile *MeshTile
+		var parentPoly *Poly
+		if bestNode.Pidx != 0 {
+			parentRef = q.NodePool.GetNodeAtIdx(bestNode.Pidx).ID
+		}
+		if parentRef != 0 {
+			parentTile, parentPoly = q.Nav.GetTileAndPolyByRefUnsafe(parentRef)
+		}
+
+		if n < maxResult {
+			if resultRef != nil {
+				resultRef[n] = bestRef
+			}
+			if resultParent != nil {
+				resultParent[n] = parentRef
+			}
+			if resultCost != nil {
+				resultCost[n] = bestNode.Total
+			}
+			n++
+		} else {
+			status = ErrBufferTooSmall
+		}
+
+		for l := bestPoly.FirstLink; l != NullLink; l = bestTile.Links[l].Next {
+			link := &bestTile.Links[l]
+			neighbourRef := link.Ref
+			// Skip invalid neighbours and do not follow back to parent.
+			if neighbourRef == 0 || neighbourRef == parentRef {
 				continue
 			}
-			neiTile, neiPoly := q.Nav.GetTileAndPolyByRefUnsafe(link.Ref)
-			if !filter.PassFilter(link.Ref, neiTile, neiPoly) {
+
+			// Expand to neighbour.
+			neighbourTile, neighbourPoly := q.Nav.GetTileAndPolyByRefUnsafe(neighbourRef)
+
+			// Do not advance if the polygon is excluded by the filter.
+			if !filter.PassFilter(neighbourRef, neighbourTile, neighbourPoly) {
 				continue
 			}
 
-			nei := q.NodePool.GetNode(link.Ref, 0)
-			if nei == nil {
-				continue
-			}
-			if nei.Flags&NodeClosed != 0 {
+			// Find edge and calc distance to the edge.
+			va, vb, ok := q.getPortalPoints(bestRef, neighbourRef, bestTile, neighbourTile, bestPoly, neighbourPoly)
+			if !ok {
 				continue
 			}
 
-			// Check distance from center
-			var closestPt [3]float32
-			closestPt, _ = q.Nav.closestPointOnPoly(link.Ref, centerPos)
-			distSqr := Vdist2DSqr(closestPt, centerPos)
-
+			// If the circle is not touching the next polygon, skip it.
+			distSqr, _ := distPtSegSqr2D(centerPos, va, vb)
 			if distSqr > radiusSqr {
 				continue
 			}
 
-			curCost := bestNode.Cost + filter.GetCost(closestPt, centerPos, 0, nil, nil, bestNode.ID, tile, poly, link.Ref, neiTile, neiPoly)
-
-			if (nei.Flags & NodeOpen) != 0 {
-				if nei.Total > distSqr || nei.Cost > curCost {
-					nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-					nei.Cost = curCost
-					nei.Total = distSqr
-					nei.ID = link.Ref
-					q.OpenList.Modify(nei)
-				}
-			} else {
-				nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-				nei.Cost = curCost
-				nei.Total = distSqr
-				nei.ID = link.Ref
-				nei.Flags = NodeOpen
-				q.OpenList.Push(nei)
+			neighbourNode := q.NodePool.GetNode(neighbourRef, 0)
+			if neighbourNode == nil {
+				status = ErrOutOfNodes
+				continue
 			}
 
-			if n < maxResult {
-				resultRef[n] = link.Ref
-				resultParent[n] = bestNode.ID
-				resultCost[n] = curCost
-				n++
+			if neighbourNode.Flags&NodeClosed != 0 {
+				continue
+			}
+
+			// Set neighbour node position (midpoint of portal edge) on first encounter.
+			if neighbourNode.Flags == 0 {
+				neighbourNode.Pos = Vlerp(va, vb, 0.5)
+			}
+
+			cost := filter.GetCost(
+				bestNode.Pos, neighbourNode.Pos,
+				parentRef, parentTile, parentPoly,
+				bestRef, bestTile, bestPoly,
+				neighbourRef, neighbourTile, neighbourPoly)
+
+			total := bestNode.Total + cost
+
+			// The node is already in open list and the new result is worse, skip.
+			if (neighbourNode.Flags&NodeOpen) != 0 && total >= neighbourNode.Total {
+				continue
+			}
+
+			neighbourNode.ID = neighbourRef
+			neighbourNode.Pidx = q.NodePool.GetNodeIdx(bestNode)
+			neighbourNode.Total = total
+
+			if (neighbourNode.Flags & NodeOpen) != 0 {
+				q.OpenList.Modify(neighbourNode)
+			} else {
+				neighbourNode.Flags = NodeOpen
+				q.OpenList.Push(neighbourNode)
 			}
 		}
 	}
 
-	return n, nil
+	return n, status
 }
 
 // FindPolysAroundShape finds polygons within a convex shape around a position.
+// FindPolysAroundShape finds polygons within a convex shape around a position.
+// Uses Dijkstra expansion (matching C++ dtNavMeshQuery::findPolysAroundShape).
 func (q *NavMeshQuery) FindPolysAroundShape(startRef PolyRef, verts []float32, nverts int, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, resultCost []float32, maxResult int) (int, error) {
-	if startRef == 0 {
+	if startRef == 0 || verts == nil || nverts < 3 {
 		return 0, ErrInvalidParam
 	}
-	if filter == nil {
-		return 0, ErrInvalidParam
-	}
-	if maxResult <= 0 {
+	if filter == nil || maxResult < 0 {
 		return 0, ErrInvalidParam
 	}
 
 	q.NodePool.Clear()
 	q.OpenList.Clear()
 
+	// Compute center of the query polygon.
+	var centerPos [3]float32
+	for i := 0; i < nverts; i++ {
+		centerPos[0] += verts[i*3]
+		centerPos[1] += verts[i*3+1]
+		centerPos[2] += verts[i*3+2]
+	}
+	s := 1.0 / float32(nverts)
+	centerPos[0] *= s
+	centerPos[1] *= s
+	centerPos[2] *= s
+
 	startNode := q.NodePool.GetNode(startRef, 0)
 	if startNode == nil {
 		return 0, ErrOutOfNodes
 	}
+	startNode.Pos = centerPos
 	startNode.Pidx = 0
 	startNode.Cost = 0
 	startNode.Total = 0
@@ -1190,86 +1377,114 @@ func (q *NavMeshQuery) FindPolysAroundShape(startRef PolyRef, verts []float32, n
 	startNode.Flags = NodeOpen
 	q.OpenList.Push(startNode)
 
+	status := error(nil)
 	n := 0
-	if n < maxResult {
-		resultRef[n] = startRef
-		resultParent[n] = 0
-		resultCost[n] = 0
-		n++
-	}
 
 	for !q.OpenList.Empty() {
 		bestNode := q.OpenList.Pop()
 		bestNode.Flags &= ^uint8(0) ^ NodeOpen
 		bestNode.Flags |= NodeClosed
 
-		tile, poly, _ := q.Nav.GetTileAndPolyByRef(bestNode.ID)
+		// Get poly and tile.
+		bestRef := bestNode.ID
+		bestTile, bestPoly := q.Nav.GetTileAndPolyByRefUnsafe(bestRef)
 
-		for l := poly.FirstLink; l != NullLink; l = tile.Links[l].Next {
-			link := &tile.Links[l]
-			if link.Ref == 0 {
+		// Get parent poly and tile.
+		parentRef := PolyRef(0)
+		var parentTile *MeshTile
+		var parentPoly *Poly
+		if bestNode.Pidx != 0 {
+			parentRef = q.NodePool.GetNodeAtIdx(bestNode.Pidx).ID
+		}
+		if parentRef != 0 {
+			parentTile, parentPoly = q.Nav.GetTileAndPolyByRefUnsafe(parentRef)
+		}
+
+		if n < maxResult {
+			if resultRef != nil {
+				resultRef[n] = bestRef
+			}
+			if resultParent != nil {
+				resultParent[n] = parentRef
+			}
+			if resultCost != nil {
+				resultCost[n] = bestNode.Total
+			}
+			n++
+		} else {
+			status = ErrBufferTooSmall
+		}
+
+		for l := bestPoly.FirstLink; l != NullLink; l = bestTile.Links[l].Next {
+			link := &bestTile.Links[l]
+			neighbourRef := link.Ref
+			// Skip invalid neighbours and do not follow back to parent.
+			if neighbourRef == 0 || neighbourRef == parentRef {
 				continue
 			}
-			neiTile, neiPoly := q.Nav.GetTileAndPolyByRefUnsafe(link.Ref)
-			if !filter.PassFilter(link.Ref, neiTile, neiPoly) {
+
+			// Expand to neighbour.
+			neighbourTile, neighbourPoly := q.Nav.GetTileAndPolyByRefUnsafe(neighbourRef)
+
+			// Do not advance if the polygon is excluded by the filter.
+			if !filter.PassFilter(neighbourRef, neighbourTile, neighbourPoly) {
 				continue
 			}
 
-			nei := q.NodePool.GetNode(link.Ref, 0)
-			if nei == nil {
-				continue
-			}
-			if nei.Flags&NodeClosed != 0 {
-				continue
-			}
-
-			// Check if polygon overlaps the query shape
-			var closestPt [3]float32
-			closestPt = Vcopy(verts)
-
-			// Use PointInPolygon check with the query shape
-			if !PointInPolygon(closestPt, verts, nverts) {
+			// Find edge and calc distance to the edge.
+			va, vb, ok := q.getPortalPoints(bestRef, neighbourRef, bestTile, neighbourTile, bestPoly, neighbourPoly)
+			if !ok {
 				continue
 			}
 
-			var center [3]float32
-			for k := 0; k < nverts; k++ {
-				center[0] += verts[k*3]
-				center[1] += verts[k*3+1]
-				center[2] += verts[k*3+2]
+			// If the portal edge does not intersect the query polygon, skip.
+			hit, _, _, _, _ := IntersectSegmentPoly2D(va, vb, verts, nverts)
+			if !hit {
+				continue
 			}
-			s := 1.0 / float32(nverts)
-			center[0] *= s
-			center[1] *= s
-			center[2] *= s
 
-			curCost := bestNode.Cost + filter.GetCost(closestPt, center, 0, nil, nil, bestNode.ID, tile, poly, link.Ref, neiTile, neiPoly)
+			neighbourNode := q.NodePool.GetNode(neighbourRef, 0)
+			if neighbourNode == nil {
+				status = ErrOutOfNodes
+				continue
+			}
 
-			if (nei.Flags & NodeOpen) != 0 {
-				if nei.Cost > curCost {
-					nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-					nei.Cost = curCost
-					nei.ID = link.Ref
-					q.OpenList.Modify(nei)
-				}
+			if neighbourNode.Flags&NodeClosed != 0 {
+				continue
+			}
+
+			// Set neighbour node position (midpoint of portal edge) on first encounter.
+			if neighbourNode.Flags == 0 {
+				neighbourNode.Pos = Vlerp(va, vb, 0.5)
+			}
+
+			cost := filter.GetCost(
+				bestNode.Pos, neighbourNode.Pos,
+				parentRef, parentTile, parentPoly,
+				bestRef, bestTile, bestPoly,
+				neighbourRef, neighbourTile, neighbourPoly)
+
+			total := bestNode.Total + cost
+
+			// The node is already in open list and the new result is worse, skip.
+			if (neighbourNode.Flags&NodeOpen) != 0 && total >= neighbourNode.Total {
+				continue
+			}
+
+			neighbourNode.ID = neighbourRef
+			neighbourNode.Pidx = q.NodePool.GetNodeIdx(bestNode)
+			neighbourNode.Total = total
+
+			if (neighbourNode.Flags & NodeOpen) != 0 {
+				q.OpenList.Modify(neighbourNode)
 			} else {
-				nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-				nei.Cost = curCost
-				nei.ID = link.Ref
-				nei.Flags = NodeOpen
-				q.OpenList.Push(nei)
-			}
-
-			if n < maxResult {
-				resultRef[n] = link.Ref
-				resultParent[n] = bestNode.ID
-				resultCost[n] = curCost
-				n++
+				neighbourNode.Flags = NodeOpen
+				q.OpenList.Push(neighbourNode)
 			}
 		}
 	}
 
-	return n, nil
+	return n, status
 }
 
 // FindDistanceToWall finds the distance from a position to the nearest wall.
@@ -1323,8 +1538,8 @@ func (q *NavMeshQuery) FindDistanceToWall(startRef PolyRef, centerPos [3]float32
 				continue
 			}
 
-			va := Vcopy(tile.Verts[poly.Verts[i]*3:poly.Verts[i]*3+3])
-			vb := Vcopy(tile.Verts[poly.Verts[(i+1)%nv]*3:poly.Verts[(i+1)%nv]*3+3])
+			va := Vcopy(tile.Verts[poly.Verts[i]*3 : poly.Verts[i]*3+3])
+			vb := Vcopy(tile.Verts[poly.Verts[(i+1)%nv]*3 : poly.Verts[(i+1)%nv]*3+3])
 
 			d, t := DistancePtSegSqr2D(centerPos, va, vb)
 			if d < foundDist {
@@ -1385,6 +1600,171 @@ func (q *NavMeshQuery) FindDistanceToWall(startRef PolyRef, centerPos [3]float32
 
 	return float32(math.Sqrt(float64(foundDist))), foundPos, foundNormal, nil
 }
+
+// FindLocalNeighbourhood finds the polygons reachable from startRef within a radius.
+// Uses connectivity-based BFS (matching C++ dtNavMeshQuery::findLocalNeighbourhood).
+func (q *NavMeshQuery) FindLocalNeighbourhood(startRef PolyRef, centerPos [3]float32, radius float32, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, maxResult int) (int, error) {
+	if startRef == 0 {
+		return 0, ErrInvalidParam
+	}
+	if !Visfinite(centerPos) {
+		return 0, ErrInvalidParam
+	}
+	if radius < 0 {
+		return 0, ErrInvalidParam
+	}
+	if filter == nil || maxResult < 0 {
+		return 0, ErrInvalidParam
+	}
+
+	q.TinyNodePool.Clear()
+
+	startNode := q.TinyNodePool.GetNode(startRef, 0)
+	if startNode == nil {
+		return 0, ErrOutOfNodes
+	}
+	startNode.Pidx = 0
+	startNode.ID = startRef
+	startNode.Flags = NodeClosed
+
+	const maxStack = 48
+	stack := make([]*Node, 0, maxStack)
+	stack = append(stack, startNode)
+
+	radiusSqr := radius * radius
+
+	var pa [VertsPerPolygon * 3]float32
+	var pb [VertsPerPolygon * 3]float32
+
+	status := error(nil)
+
+	n := 0
+	if n < maxResult {
+		resultRef[n] = startNode.ID
+		if resultParent != nil {
+			resultParent[n] = 0
+		}
+		n++
+	} else {
+		status = ErrBufferTooSmall
+	}
+
+	for len(stack) > 0 {
+		// Pop front (BFS: use as a queue).
+		curNode := stack[0]
+		stack = stack[1:]
+
+		curRef := curNode.ID
+		curTile, curPoly := q.Nav.GetTileAndPolyByRefUnsafe(curRef)
+
+		for l := curPoly.FirstLink; l != NullLink; l = curTile.Links[l].Next {
+			link := &curTile.Links[l]
+			neighbourRef := link.Ref
+			if neighbourRef == 0 {
+				continue
+			}
+
+			neighbourNode := q.TinyNodePool.GetNode(neighbourRef, 0)
+			if neighbourNode == nil {
+				continue
+			}
+			if neighbourNode.Flags&NodeClosed != 0 {
+				continue
+			}
+
+			neighbourTile, neighbourPoly := q.Nav.GetTileAndPolyByRefUnsafe(neighbourRef)
+
+			// Skip off-mesh connections.
+			if neighbourPoly.GetType() == PolyTypeOffMeshConnection {
+				continue
+			}
+
+			// Do not advance if the polygon is excluded by the filter.
+			if !filter.PassFilter(neighbourRef, neighbourTile, neighbourPoly) {
+				continue
+			}
+
+			// Find edge and calc distance to the edge.
+			va, vb, ok := q.getPortalPoints(curRef, neighbourRef, curTile, neighbourTile, curPoly, neighbourPoly)
+			if !ok {
+				continue
+			}
+
+			// If the circle is not touching the next polygon, skip it.
+			distSqr, _ := distPtSegSqr2D(centerPos, va, vb)
+			if distSqr > radiusSqr {
+				continue
+			}
+
+			// Mark node visited.
+			neighbourNode.Flags |= NodeClosed
+			neighbourNode.Pidx = q.TinyNodePool.GetNodeIdx(curNode)
+
+			// Check that the polygon does not collide with existing polygons.
+			npa := int(neighbourPoly.VertCount)
+			for k := 0; k < npa; k++ {
+				vIdx := neighbourPoly.Verts[k]
+				pa[k*3] = neighbourTile.Verts[vIdx*3]
+				pa[k*3+1] = neighbourTile.Verts[vIdx*3+1]
+				pa[k*3+2] = neighbourTile.Verts[vIdx*3+2]
+			}
+
+			overlap := false
+			for j := 0; j < n; j++ {
+				pastRef := resultRef[j]
+
+				// Connected polys do not overlap.
+				connected := false
+				for k := curPoly.FirstLink; k != NullLink; k = curTile.Links[k].Next {
+					if curTile.Links[k].Ref == pastRef {
+						connected = true
+						break
+					}
+				}
+				if connected {
+					continue
+				}
+
+				// Potentially overlapping.
+				pastTile, pastPoly := q.Nav.GetTileAndPolyByRefUnsafe(pastRef)
+
+				npb := int(pastPoly.VertCount)
+				for k := 0; k < npb; k++ {
+					vIdx := pastPoly.Verts[k]
+					pb[k*3] = pastTile.Verts[vIdx*3]
+					pb[k*3+1] = pastTile.Verts[vIdx*3+1]
+					pb[k*3+2] = pastTile.Verts[vIdx*3+2]
+				}
+
+				if OverlapPolyPoly2D(pa[:npa*3], npa, pb[:npb*3], npb) {
+					overlap = true
+					break
+				}
+			}
+			if overlap {
+				continue
+			}
+
+			// This poly is fine, store and advance.
+			if n < maxResult {
+				resultRef[n] = neighbourRef
+				if resultParent != nil {
+					resultParent[n] = curRef
+				}
+				n++
+			} else {
+				status = ErrBufferTooSmall
+			}
+
+			if len(stack) < maxStack {
+				stack = append(stack, neighbourNode)
+			}
+		}
+	}
+
+	return n, status
+}
+
 func (q *NavMeshQuery) GetPolyWallSegments(ref PolyRef, filter *QueryFilter, segs []NeighbourSeg, maxSegs int) (int, error) {
 	if ref == 0 {
 		return 0, ErrInvalidParam
@@ -1410,8 +1790,8 @@ func (q *NavMeshQuery) GetPolyWallSegments(ref PolyRef, filter *QueryFilter, seg
 			}
 		}
 
-		va := Vcopy(tile.Verts[poly.Verts[i]*3:poly.Verts[i]*3+3])
-		vb := Vcopy(tile.Verts[poly.Verts[(i+1)%nv]*3:poly.Verts[(i+1)%nv]*3+3])
+		va := Vcopy(tile.Verts[poly.Verts[i]*3 : poly.Verts[i]*3+3])
+		vb := Vcopy(tile.Verts[poly.Verts[(i+1)%nv]*3 : poly.Verts[(i+1)%nv]*3+3])
 
 		if !connected {
 			if n < maxSegs {
@@ -1498,8 +1878,8 @@ func (q *NavMeshQuery) ClosestPointOnPolyBoundary(ref PolyRef, pos [3]float32) (
 	var bestVa, bestVb [3]float32
 
 	for i := 0; i < nv; i++ {
-		va := Vcopy(tile.Verts[poly.Verts[i]*3:poly.Verts[i]*3+3])
-		vb := Vcopy(tile.Verts[poly.Verts[(i+1)%nv]*3:poly.Verts[(i+1)%nv]*3+3])
+		va := Vcopy(tile.Verts[poly.Verts[i]*3 : poly.Verts[i]*3+3])
+		vb := Vcopy(tile.Verts[poly.Verts[(i+1)%nv]*3 : poly.Verts[(i+1)%nv]*3+3])
 		d, t := DistancePtSegSqr2D(pos, va, vb)
 		if d < bestDist {
 			bestDist = d
@@ -1573,12 +1953,8 @@ func (q *NavMeshQuery) FindNearestPoly(center, halfExtents [3]float32, filter *Q
 			var d float32
 			if posOverPoly {
 				d = Abs(diff[1])
-				if d > halfExtents[1] {
-					d = d - halfExtents[1]
-					d = d * d
-				} else {
-					d = 0
-				}
+				d = Max(0.0, d-tile.Header.WalkableClimb)
+				d = d * d
 			} else {
 				d = VlenSqr(diff)
 			}
@@ -1598,113 +1974,101 @@ func (q *NavMeshQuery) FindNearestPoly(center, halfExtents [3]float32, filter *Q
 }
 
 // FindRandomPoint finds a random point in the navigation mesh.
+// Uses area-weighted reservoir sampling (matching C++ dtNavMeshQuery::findRandomPoint).
 func (q *NavMeshQuery) FindRandomPoint(filter *QueryFilter, randomFunc func() float32) (PolyRef, [3]float32, error) {
 	if filter == nil || randomFunc == nil {
 		return 0, [3]float32{}, ErrInvalidParam
 	}
-	var resultPt [3]float32
-	var resultRef PolyRef
 
-	totPolyCount := 0
-	for tileIndex := 0; tileIndex < q.Nav.MaxTiles; tileIndex++ {
-		tile := &q.Nav.Tiles[tileIndex]
-		if tile.Header == nil {
-			continue
-		}
-		for i := 0; i < int(tile.Header.PolyCount); i++ {
-			poly := &tile.Polys[i]
-			if poly.GetType() == PolyTypeOffMeshConnection {
-				continue
-			}
-			if filter.PassFilter(q.Nav.GetPolyRefBase(tile)|PolyRef(i), tile, poly) {
-				totPolyCount++
-			}
-		}
-	}
-
-	if totPolyCount == 0 {
-		return 0, [3]float32{}, ErrFailure
-	}
-
-	// Pick a random polygon weighted by area
-	r := randomFunc() * float32(totPolyCount)
-	areaAccum := float32(0)
-	hitPoly := -1
+	// Randomly pick one tile using reservoir sampling.
 	var hitTile *MeshTile
-
-	for tileIndex := 0; tileIndex < q.Nav.MaxTiles && hitPoly < 0; tileIndex++ {
-		tile := &q.Nav.Tiles[tileIndex]
-		if tile.Header == nil {
+	var tsum float32
+	for i := 0; i < q.Nav.MaxTiles; i++ {
+		t := &q.Nav.Tiles[i]
+		if t.Header == nil {
 			continue
 		}
-		for i := 0; i < int(tile.Header.PolyCount); i++ {
-			poly := &tile.Polys[i]
-			if poly.GetType() == PolyTypeOffMeshConnection {
-				continue
-			}
-			if !filter.PassFilter(q.Nav.GetPolyRefBase(tile)|PolyRef(i), tile, poly) {
-				continue
-			}
-			areaAccum++
-			if r < areaAccum {
-				hitPoly = i
-				hitTile = tile
-				break
-			}
+		tsum += 1.0 // each tile has equal weight
+		if randomFunc()*tsum <= 1.0 {
+			hitTile = t
 		}
 	}
-
-	if hitPoly < 0 {
+	if hitTile == nil {
 		return 0, [3]float32{}, ErrFailure
 	}
 
-	// Pick a random point within the polygon
+	// Randomly pick one polygon weighted by polygon area.
+	var poly *Poly
+	polyRef := PolyRef(0)
+	base := q.Nav.GetPolyRefBase(hitTile)
+	var areaSum float32
+
+	for i := 0; i < int(hitTile.Header.PolyCount); i++ {
+		p := &hitTile.Polys[i]
+		// Do not return off-mesh connection polygons.
+		if p.GetType() != PolyTypeGround {
+			continue
+		}
+		// Must pass filter.
+		ref := base | PolyRef(i)
+		if !filter.PassFilter(ref, hitTile, p) {
+			continue
+		}
+
+		// Calc area of the polygon.
+		var polyArea float32
+		for j := 2; j < int(p.VertCount); j++ {
+			va := Vcopy(hitTile.Verts[p.Verts[0]*3 : p.Verts[0]*3+3])
+			vb := Vcopy(hitTile.Verts[p.Verts[j-1]*3 : p.Verts[j-1]*3+3])
+			vc := Vcopy(hitTile.Verts[p.Verts[j]*3 : p.Verts[j]*3+3])
+			polyArea += TriArea2D(va, vb, vc)
+		}
+
+		// Choose random polygon weighted by area, using reservoir sampling.
+		areaSum += polyArea
+		if randomFunc()*areaSum <= polyArea {
+			poly = p
+			polyRef = ref
+		}
+	}
+
+	if poly == nil {
+		return 0, [3]float32{}, ErrFailure
+	}
+
+	// Randomly pick point on polygon.
 	var verts [VertsPerPolygon * 3]float32
-	poly := &hitTile.Polys[hitPoly]
 	nv := int(poly.VertCount)
-	for i := 0; i < nv; i++ {
-		copy(verts[i*3:i*3+3], hitTile.Verts[poly.Verts[i]*3:poly.Verts[i]*3+3])
+	for j := 0; j < nv; j++ {
+		copy(verts[j*3:j*3+3], hitTile.Verts[poly.Verts[j]*3:poly.Verts[j]*3+3])
 	}
 
-	// Use detail triangles
-	pd := &hitTile.DetailMeshes[hitPoly]
-	if pd.TriCount > 0 {
-		ti := int(randomFunc() * float32(pd.TriCount))
-		if ti >= int(pd.TriCount) {
-			ti = int(pd.TriCount) - 1
-		}
-		tris := hitTile.DetailTris[(int(pd.TriBase)+ti)*4:]
-		var triVerts [3][]float32
-		for j := 0; j < 3; j++ {
-			if tris[j] < uint8(poly.VertCount) {
-				triVerts[j] = hitTile.Verts[poly.Verts[tris[j]]*3 : poly.Verts[tris[j]]*3+3]
-			} else {
-				triVerts[j] = hitTile.DetailVerts[(int(pd.VertBase)+int(tris[j])-int(poly.VertCount))*3 : (int(pd.VertBase)+int(tris[j])-int(poly.VertCount))*3+3]
-			}
-		}
-		s := randomFunc()
-		t := randomFunc()
-		if s+t > 1 {
-			s = 1 - s
-			t = 1 - t
-		}
-		u := 1 - s - t
-		resultPt[0] = triVerts[0][0]*u + triVerts[1][0]*s + triVerts[2][0]*t
-		resultPt[1] = triVerts[0][1]*u + triVerts[1][1]*s + triVerts[2][1]*t
-		resultPt[2] = triVerts[0][2]*u + triVerts[1][2]*s + triVerts[2][2]*t
-	} else {
-		// Fallback: use polygon centroid
-		resultPt = CalcPolyCenter(poly.Verts[:nv], hitTile.Verts)
-	}
+	areas := make([]float32, nv)
+	s := randomFunc()
+	t := randomFunc()
+	resultPt := RandomPointInConvexPoly(verts[:], nv, areas, s, t)
 
-	resultRef = q.Nav.GetPolyRefBase(hitTile) | PolyRef(hitPoly)
-	return resultRef, resultPt, nil
+	// Project point onto polygon to get proper height.
+	closest, _, _ := q.ClosestPointOnPoly(polyRef, resultPt)
+	resultPt = closest
+
+	return polyRef, resultPt, nil
 }
 
 // FindRandomPointAroundCircle finds a random point within a circle around a position.
+// Uses Dijkstra expansion with area-weighted reservoir sampling
+// (matching C++ dtNavMeshQuery::findRandomPointAroundCircle).
 func (q *NavMeshQuery) FindRandomPointAroundCircle(startRef PolyRef, centerPos [3]float32, maxRadius float32, filter *QueryFilter, randomFunc func() float32) (PolyRef, [3]float32, error) {
 	if startRef == 0 || filter == nil || randomFunc == nil {
 		return 0, [3]float32{}, ErrInvalidParam
+	}
+	if !Visfinite(centerPos) || maxRadius < 0 {
+		return 0, [3]float32{}, ErrInvalidParam
+	}
+
+	startTile, startPoly := q.Nav.GetTileAndPolyByRefUnsafe(startRef)
+	if !filter.PassFilter(startRef, startTile, startPoly) {
+		return 0, [3]float32{}, ErrFailure
 	}
 
 	q.NodePool.Clear()
@@ -1714,6 +2078,7 @@ func (q *NavMeshQuery) FindRandomPointAroundCircle(startRef PolyRef, centerPos [
 	if startNode == nil {
 		return 0, [3]float32{}, ErrOutOfNodes
 	}
+	startNode.Pos = centerPos
 	startNode.Pidx = 0
 	startNode.Cost = 0
 	startNode.Total = 0
@@ -1722,89 +2087,123 @@ func (q *NavMeshQuery) FindRandomPointAroundCircle(startRef PolyRef, centerPos [
 	q.OpenList.Push(startNode)
 
 	radiusSqr := maxRadius * maxRadius
+	var areaSum float32
+	var randomTile *MeshTile
+	var randomPoly *Poly
+	randomPolyRef := PolyRef(0)
 
 	for !q.OpenList.Empty() {
 		bestNode := q.OpenList.Pop()
 		bestNode.Flags &= ^uint8(0) ^ NodeOpen
 		bestNode.Flags |= NodeClosed
 
-		tile, poly, _ := q.Nav.GetTileAndPolyByRef(bestNode.ID)
+		bestRef := bestNode.ID
+		bestTile, bestPoly := q.Nav.GetTileAndPolyByRefUnsafe(bestRef)
 
-		for l := poly.FirstLink; l != NullLink; l = tile.Links[l].Next {
-			link := &tile.Links[l]
-			if link.Ref == 0 {
+		// Place random locations on ground.
+		if bestPoly.GetType() == PolyTypeGround {
+			// Calc area of the polygon.
+			var polyArea float32
+			for j := 2; j < int(bestPoly.VertCount); j++ {
+				va := Vcopy(bestTile.Verts[bestPoly.Verts[0]*3 : bestPoly.Verts[0]*3+3])
+				vb := Vcopy(bestTile.Verts[bestPoly.Verts[j-1]*3 : bestPoly.Verts[j-1]*3+3])
+				vc := Vcopy(bestTile.Verts[bestPoly.Verts[j]*3 : bestPoly.Verts[j]*3+3])
+				polyArea += TriArea2D(va, vb, vc)
+			}
+			// Choose random polygon weighted by area, using reservoir sampling.
+			areaSum += polyArea
+			if randomFunc()*areaSum <= polyArea {
+				randomTile = bestTile
+				randomPoly = bestPoly
+				randomPolyRef = bestRef
+			}
+		}
+
+		// Get parent poly and tile.
+		parentRef := PolyRef(0)
+		if bestNode.Pidx != 0 {
+			parentRef = q.NodePool.GetNodeAtIdx(bestNode.Pidx).ID
+		}
+
+		for l := bestPoly.FirstLink; l != NullLink; l = bestTile.Links[l].Next {
+			link := &bestTile.Links[l]
+			neighbourRef := link.Ref
+			// Skip invalid neighbours and do not follow back to parent.
+			if neighbourRef == 0 || neighbourRef == parentRef {
 				continue
 			}
-			neiTile, neiPoly := q.Nav.GetTileAndPolyByRefUnsafe(link.Ref)
-			if !filter.PassFilter(link.Ref, neiTile, neiPoly) {
+
+			neighbourTile, neighbourPoly := q.Nav.GetTileAndPolyByRefUnsafe(neighbourRef)
+
+			if !filter.PassFilter(neighbourRef, neighbourTile, neighbourPoly) {
 				continue
 			}
 
-			var closestPt [3]float32
-			closestPt, _ = q.Nav.closestPointOnPoly(link.Ref, centerPos)
-			distSqr := Vdist2DSqr(closestPt, centerPos)
+			// Find edge and calc distance to the edge.
+			va, vb, ok := q.getPortalPoints(bestRef, neighbourRef, bestTile, neighbourTile, bestPoly, neighbourPoly)
+			if !ok {
+				continue
+			}
 
+			// If the circle is not touching the next polygon, skip it.
+			distSqr, _ := distPtSegSqr2D(centerPos, va, vb)
 			if distSqr > radiusSqr {
 				continue
 			}
 
-			nei := q.NodePool.GetNode(link.Ref, 0)
-			if nei == nil {
-				continue
-			}
-			if nei.Flags&NodeClosed != 0 {
+			neighbourNode := q.NodePool.GetNode(neighbourRef, 0)
+			if neighbourNode == nil {
 				continue
 			}
 
-			if (nei.Flags & NodeOpen) != 0 {
-				if nei.Total > distSqr {
-					nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-					nei.Total = distSqr
-					nei.ID = link.Ref
-					q.OpenList.Modify(nei)
-				}
+			if neighbourNode.Flags&NodeClosed != 0 {
+				continue
+			}
+
+			// Cost (simple distance-based for random search).
+			if neighbourNode.Flags == 0 {
+				neighbourNode.Pos = Vlerp(va, vb, 0.5)
+			}
+			total := bestNode.Total + Vdist(bestNode.Pos, neighbourNode.Pos)
+
+			// The node is already in open list and the new result is worse, skip.
+			if (neighbourNode.Flags&NodeOpen) != 0 && total >= neighbourNode.Total {
+				continue
+			}
+
+			neighbourNode.ID = neighbourRef
+			neighbourNode.Pidx = q.NodePool.GetNodeIdx(bestNode)
+			neighbourNode.Total = total
+
+			if (neighbourNode.Flags & NodeOpen) != 0 {
+				q.OpenList.Modify(neighbourNode)
 			} else {
-				nei.Pidx = q.NodePool.GetNodeIdx(bestNode)
-				nei.Total = distSqr
-				nei.ID = link.Ref
-				nei.Flags = NodeOpen
-				q.OpenList.Push(nei)
+				neighbourNode.Flags = NodeOpen
+				q.OpenList.Push(neighbourNode)
 			}
 		}
 	}
 
-	// Find a random connected polygon
-	var polys [128]PolyRef
-	polyCount := 0
-	for i := 0; i < q.NodePool.nodeCount && polyCount < 128; i++ {
-		if q.NodePool.nodes[i].ID != 0 {
-			polys[polyCount] = q.NodePool.nodes[i].ID
-			polyCount++
-		}
-	}
-
-	if polyCount == 0 {
+	if randomPoly == nil {
 		return 0, [3]float32{}, ErrFailure
 	}
 
-	hitIdx := int(randomFunc() * float32(polyCount))
-	if hitIdx >= polyCount {
-		hitIdx = polyCount - 1
-	}
-	resultRef := polys[hitIdx]
-
-	tile, poly := q.Nav.GetTileAndPolyByRefUnsafe(resultRef)
-	nv := int(poly.VertCount)
+	// Randomly pick point on polygon.
+	nv := int(randomPoly.VertCount)
 	var verts [VertsPerPolygon * 3]float32
-	for i := 0; i < nv; i++ {
-		copy(verts[i*3:i*3+3], tile.Verts[poly.Verts[i]*3:poly.Verts[i]*3+3])
+	for j := 0; j < nv; j++ {
+		copy(verts[j*3:j*3+3], randomTile.Verts[randomPoly.Verts[j]*3:randomPoly.Verts[j]*3+3])
 	}
 	areas := make([]float32, nv)
 	s := randomFunc()
 	t := randomFunc()
 	resultPt := RandomPointInConvexPoly(verts[:], nv, areas, s, t)
 
-	return resultRef, resultPt, nil
+	// Project point onto polygon to get proper height.
+	closest, _, _ := q.ClosestPointOnPoly(randomPolyRef, resultPt)
+	resultPt = closest
+
+	return randomPolyRef, resultPt, nil
 }
 func (q *NavMeshQuery) QueryPolygons(center, halfExtents [3]float32, filter *QueryFilter, polys []PolyRef, maxPolys int) (int, error) {
 
@@ -1912,6 +2311,7 @@ func (q *NavMeshQuery) FindPathSliced(startRef, endRef PolyRef, startPos, endPos
 	startNode.Pidx = 0
 	startNode.Cost = 0
 	startNode.Total = Vdist(startPos, endPos) * H_SCALE
+	startNode.Pos = startPos
 	startNode.ID = startRef
 	startNode.Flags = NodeOpen
 	q.OpenList.Push(startNode)

@@ -168,9 +168,9 @@ func distancePtSeg2d(pt, p, q [3]float32) float32 {
 func distToTriMesh(p [3]float32, verts []float32, tris []int, ntris int) float32 {
 	dmin := float32(math.MaxFloat32)
 	for i := 0; i < ntris; i++ {
-		va := toV3(verts[tris[i*4+0]*3:])
-		vb := toV3(verts[tris[i*4+1]*3:])
-		vc := toV3(verts[tris[i*4+2]*3:])
+		va := Vcopy(verts[tris[i*4+0]*3:])
+		vb := Vcopy(verts[tris[i*4+1]*3:])
+		vc := Vcopy(verts[tris[i*4+2]*3:])
 		d := distPtTri(p, va, vb, vc)
 		if d < dmin {
 			dmin = d
@@ -182,18 +182,14 @@ func distToTriMesh(p [3]float32, verts []float32, tris []int, ntris int) float32
 	return dmin
 }
 
-func toV3(s []float32) [3]float32 {
-	return [3]float32{s[0], s[1], s[2]}
-}
-
 func distToPoly(nvert int, verts []float32, p [3]float32) float32 {
 	dmin := float32(math.MaxFloat32)
 	var i, j int
 	c := false
 	for i, j = 0, nvert-1; i < nvert; j = i {
 		i++
-		vi := toV3(verts[i*3:])
-		vj := toV3(verts[j*3:])
+		vi := Vcopy(verts[i*3:])
+		vj := Vcopy(verts[j*3:])
 		if (vi[2] > p[2]) != (vj[2] > p[2]) &&
 			p[0] < (vj[0]-vi[0])*(p[2]-vi[2])/(vj[2]-vi[2])+vi[0] {
 			c = !c
@@ -309,8 +305,8 @@ func overlapSegSeg2d(a, b, c, d [3]float32) int {
 }
 
 func overlapEdges(pts []float32, edges []int, nedges, s1, t1 int) bool {
-	ps1 := toV3(pts[s1*3:])
-	pt1 := toV3(pts[t1*3:])
+	ps1 := Vcopy(pts[s1*3:])
+	pt1 := Vcopy(pts[t1*3:])
 
 	for i := 0; i < nedges; i++ {
 		s0 := edges[i*4+0]
@@ -318,7 +314,7 @@ func overlapEdges(pts []float32, edges []int, nedges, s1, t1 int) bool {
 		if s0 == s1 || s0 == t1 || t0 == s1 || t0 == t1 {
 			continue
 		}
-		if overlapSegSeg2d(toV3(pts[s0*3:]), toV3(pts[t0*3:]), ps1, pt1) != 0 {
+		if overlapSegSeg2d(Vcopy(pts[s0*3:]), Vcopy(pts[t0*3:]), ps1, pt1) != 0 {
 			return true
 		}
 	}
@@ -348,9 +344,9 @@ func completeFacet(pts []float32, npts int, edges []int, nedges *int, maxEdges i
 		if u == s || u == t {
 			continue
 		}
-		ps := toV3(pts[s*3:])
-		ptv := toV3(pts[t*3:])
-		pu := toV3(pts[u*3:])
+		ps := Vcopy(pts[s*3:])
+		ptv := Vcopy(pts[t*3:])
+		pu := Vcopy(pts[u*3:])
 		if vcross2(ps, ptv, pu) > eps {
 			if r < 0 {
 				pt = u
@@ -470,14 +466,14 @@ func polyMinExtent(verts []float32, nverts int) float32 {
 	minDist := float32(math.MaxFloat32)
 	for i := 0; i < nverts; i++ {
 		ni := (i + 1) % nverts
-		p1 := toV3(verts[i*3:])
-		p2 := toV3(verts[ni*3:])
+		p1 := Vcopy(verts[i*3:])
+		p2 := Vcopy(verts[ni*3:])
 		maxEdgeDist := float32(0)
 		for j := 0; j < nverts; j++ {
 			if j == i || j == ni {
 				continue
 			}
-			d := distancePtSeg2d(toV3(verts[j*3:]), p1, p2)
+			d := distancePtSeg2d(Vcopy(verts[j*3:]), p1, p2)
 			if d > maxEdgeDist {
 				maxEdgeDist = d
 			}
@@ -635,7 +631,7 @@ func getCornerHeight(x, y, i, dir int, chf *CompactHeightfield) (int, bool) {
 			regs[2] = uint32(chf.Spans[ai2].Reg) | (uint32(chf.Areas[ai2]) << 16)
 		}
 	}
-		isBorderVertex := false
+	isBorderVertex := false
 
 	for j := 0; j < 4; j++ {
 		a := j
@@ -674,7 +670,8 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points []i
 			isBorderVertex := false
 			isAreaBorder := false
 			px := x
-			var py int; py, isBorderVertex = getCornerHeight(x, y, i, int(dir), chf)
+			var py int
+			py, isBorderVertex = getCornerHeight(x, y, i, int(dir), chf)
 			pz := y
 			switch dir {
 			case 0:

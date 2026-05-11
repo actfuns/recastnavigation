@@ -1,10 +1,6 @@
 // Package detour_crowd implements local steering and dynamic avoidance features for groups of agents.
 package detour_crowd
 
-import (
-	"github.com/actfuns/recastnavigation/recast"
-)
-
 // Constants
 
 // CrowdAgentMaxNeighbours is the maximum number of neighbors that a crowd agent
@@ -100,7 +96,7 @@ type CrowdAgentDebugInfo struct {
 // Helper functions used across the crowd package.
 
 func tween(t, t0, t1 float32) float32 {
-	return float32(recast.Clamp(int((t-t0)/(t1-t0)), 0, 1))
+	return clampF32((t-t0)/(t1-t0), 0.0, 1.0)
 }
 
 func clampF32(v, min, max float32) float32 {

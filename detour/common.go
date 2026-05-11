@@ -471,10 +471,7 @@ func RandomPointInConvexPoly(pts []float32, npts int, areas []float32, s, t floa
 			[3]float32{pts[(i-1)*3], pts[(i-1)*3+1], pts[(i-1)*3+2]},
 			[3]float32{pts[i*3], pts[i*3+1], pts[i*3+2]},
 		)
-		if areas[i] < 0.001 {
-			areas[i] = 0.001
-		}
-		areasum += areas[i]
+		areasum += Max(float32(0.001), areas[i])
 	}
 	thr := s * areasum
 	acc := float32(0)

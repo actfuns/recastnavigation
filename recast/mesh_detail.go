@@ -313,7 +313,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 				maxd := float32(0)
 				maxi := -1
 				for m := a + 1; m < b; m++ {
-					dev := distancePtSeg(toV3(edge[m*3:]), toV3(va), toV3(vb))
+					dev := distancePtSeg(Vcopy(edge[m*3:]), Vcopy(va), Vcopy(vb))
 					if dev > maxd {
 						maxd = dev
 						maxi = m

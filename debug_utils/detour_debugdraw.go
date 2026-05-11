@@ -143,11 +143,11 @@ func drawMeshTile(dd DebugDraw, mesh *detour.NavMesh, query *detour.NavMeshQuery
 					dd.VertexPosColor([3]float32{tile.Verts[p.Verts[t[k]]*3], tile.Verts[p.Verts[t[k]]*3+1], tile.Verts[p.Verts[t[k]]*3+2]}, col)
 				} else {
 					dd.VertexPosColor(
-							[3]float32{
-								tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3],
-								tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+1],
-								tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+2],
-							}, col)
+						[3]float32{
+							tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3],
+							tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+1],
+							tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+2],
+						}, col)
 				}
 			}
 		}
@@ -366,7 +366,8 @@ func drawMeshTilePortal(dd DebugDraw, tile *detour.MeshTile) {
 				va := tile.Verts[poly.Verts[j]*3 : poly.Verts[j]*3+3]
 				vb := tile.Verts[poly.Verts[(j+1)%nv]*3 : poly.Verts[(j+1)%nv]*3+3]
 
-				if side == 0 || side == 4 {
+				switch side {
+				case 0, 4:
 					var col uint32
 					if side == 0 {
 						col = RGBA(128, 0, 0, 128)
@@ -389,7 +390,7 @@ func drawMeshTilePortal(dd DebugDraw, tile *detour.MeshTile) {
 					dd.VertexXYZColor(x, vb[1]-pady, vb[2], col)
 					dd.VertexXYZColor(x, vb[1]-pady, vb[2], col)
 					dd.VertexXYZColor(x, va[1]-pady, va[2], col)
-				} else if side == 2 || side == 6 {
+				case 2, 6:
 					var col uint32
 					if side == 2 {
 						col = RGBA(0, 128, 0, 128)
@@ -499,18 +500,18 @@ func DebugDrawNavMeshPoly(dd DebugDraw, mesh *detour.NavMesh, ref detour.PolyRef
 			for j := 0; j < 3; j++ {
 				if t[j] < poly.VertCount {
 					dd.VertexPosColor(
-								[3]float32{
-									tile.Verts[poly.Verts[t[j]]*3],
-									tile.Verts[poly.Verts[t[j]]*3+1],
-									tile.Verts[poly.Verts[t[j]]*3+2],
-								}, c)
+						[3]float32{
+							tile.Verts[poly.Verts[t[j]]*3],
+							tile.Verts[poly.Verts[t[j]]*3+1],
+							tile.Verts[poly.Verts[t[j]]*3+2],
+						}, c)
 				} else {
 					dd.VertexPosColor(
-								[3]float32{
-									tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3],
-									tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+1],
-									tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+2],
-								}, c)
+						[3]float32{
+							tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3],
+							tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+1],
+							tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+2],
+						}, c)
 				}
 			}
 		}
@@ -587,11 +588,12 @@ func DebugDrawTileCacheLayerAreas(dd DebugDraw, layer *tc.TileCacheLayer, cs, ch
 
 			area := layer.Areas[lidx]
 			var col uint32
-			if area == 63 {
+			switch area {
+			case 63:
 				col = LerpCol(color, RGBA(0, 192, 255, 64), 32)
-			} else if area == 0 {
+			case 0:
 				col = LerpCol(color, RGBA(0, 0, 0, 64), 32)
-			} else {
+			default:
 				col = LerpCol(color, dd.AreaToCol(uint32(area)), 32)
 			}
 

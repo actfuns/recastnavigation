@@ -218,7 +218,6 @@ var (
 	circDir   [40 * 2]float32
 	circInit  bool
 	numArcPts = 8
-	arcPad    = 0.05
 )
 
 // AppendCylinderWire appends cylinder wireframe vertices.

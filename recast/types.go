@@ -371,6 +371,11 @@ func Sqrt(x float32) float32 {
 
 // Vector helper functions
 
+// Vcopy copies a vector.
+func Vcopy(s []float32) [3]float32 {
+	return [3]float32{s[0], s[1], s[2]}
+}
+
 // Vcross derives the cross product of two vectors.
 func Vcross(v1, v2 [3]float32) [3]float32 {
 	return [3]float32{
@@ -429,7 +434,6 @@ func Vmax(mx, v [3]float32) [3]float32 {
 		max(mx[2], v[2]),
 	}
 }
-
 
 // Vdist returns the distance between two points.
 func Vdist(v1, v2 [3]float32) float32 {

@@ -126,8 +126,7 @@ func (c *PathCorridor) OptimizePathTopology(navquery NavMeshQueryInterface, filt
 }
 
 // MoveOverOffmeshConnection advances the path over an off-mesh connection.
-func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2]PolyRef,
-	startPos, endPos [3]float32, navquery NavMeshQueryInterface) bool {
+func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2]PolyRef, navquery NavMeshQueryInterface) ([3]float32, [3]float32, bool) {
 
 	// Advance the path up to and over the off-mesh connection.
 	var prevRef PolyRef
@@ -139,7 +138,7 @@ func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2
 		npos++
 	}
 	if npos == c.npath {
-		return false
+		return [3]float32{}, [3]float32{}, false
 	}
 
 	// Prune path
@@ -153,10 +152,16 @@ func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2
 
 	nav := navquery.GetAttachedNavMesh()
 	if nav == nil {
-		return false
+		return [3]float32{}, [3]float32{}, false
 	}
 
-	return false
+	startPos, endPos, err := nav.GetOffMeshConnectionPolyEndPoints(refs[0], refs[1])
+	if err != nil {
+		return [3]float32{}, [3]float32{}, false
+	}
+
+	c.pos = endPos
+	return startPos, endPos, true
 }
 
 // FixPathStart fixes the start of the path corridor.
@@ -183,13 +188,14 @@ func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos [3]float32, navq
 		n++
 	}
 
-	if n == c.npath {
+	switch n {
+	case c.npath:
 		return true
-	} else if n == 0 {
+	case 0:
 		c.pos = safePos
 		c.path[0] = safeRef
 		c.npath = 1
-	} else {
+	default:
 		c.npath = n
 	}
 
@@ -444,10 +450,6 @@ func vecSub(v1, v2 [3]float32) [3]float32 {
 
 func vecMad(v1, v2 [3]float32, s float32) [3]float32 {
 	return [3]float32{v1[0] + v2[0]*s, v1[1] + v2[1]*s, v1[2] + v2[2]*s}
-}
-
-func vecSet(x, y, z float32) [3]float32 {
-	return [3]float32{x, y, z}
 }
 
 func vecScale(v [3]float32, s float32) [3]float32 {

@@ -19,6 +19,7 @@ type NavMeshQueryInterface interface {
 	GetAttachedNavMesh() *NavMesh
 	ClosestPointOnPolyBoundary(ref PolyRef, pos [3]float32) ([3]float32, error)
 	FindPolysAroundCircle(startRef PolyRef, centerPos [3]float32, radius float32, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, resultCost []float32, maxResult int) (int, error)
+	FindLocalNeighbourhood(startRef PolyRef, centerPos [3]float32, radius float32, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, maxResult int) (int, error)
 	GetPolyWallSegments(ref PolyRef, filter *QueryFilter, segs []NeighbourSeg, maxSegs int) (int, error)
 }
 

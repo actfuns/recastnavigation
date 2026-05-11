@@ -616,7 +616,7 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet) (*
 					pj := polys[j*maxVertsPerPoly:]
 					for k := j + 1; k < npolys; k++ {
 						pk := polys[k*maxVertsPerPoly:]
-							v, ea, eb := getPolyMergeValue(pj, pk, mesh.Verts)
+						v, ea, eb := getPolyMergeValue(pj, pk, mesh.Verts)
 						if v > bestMergeVal {
 							bestMergeVal = v
 							bestPa = j
@@ -649,8 +649,8 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet) (*
 			mesh.Areas[mesh.NPolys] = cont.Area
 			mesh.NPolys++
 			if mesh.NPolys > maxTris {
-					return nil, detour.ErrBufferTooSmall
-				}
+				return nil, detour.ErrBufferTooSmall
+			}
 		}
 	}
 
