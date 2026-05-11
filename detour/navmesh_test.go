@@ -542,14 +542,11 @@ func buildGridNavmeshBytes(t testing.TB, rows, cols int, cellSize float32) []byt
 // ---------------------------------------------------------------------------
 
 func TestInitSingleTileErrors(t *testing.T) {
-	t.Run("nil data panics", func(t *testing.T) {
+	t.Run("nil data returns error", func(t *testing.T) {
 		m := &NavMesh{}
-		defer func() {
-			if r := recover(); r == nil {
-				t.Error("expected panic when InitSingleTile receives nil data")
-			}
-		}()
-		_ = m.InitSingleTile(nil, 0)
+		if err := m.InitSingleTile(nil, 0); err == nil {
+			t.Error("expected error when InitSingleTile receives nil data")
+		}
 	})
 
 	t.Run("wrong magic", func(t *testing.T) {

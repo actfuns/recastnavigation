@@ -67,23 +67,26 @@ func (m *NavMesh) Init(params *NavMeshParams) error {
 
 // InitSingleTile initializes the navigation mesh for single tile use.
 func (m *NavMesh) InitSingleTile(data []byte, flags int) error {
-	header := (*MeshHeader)(unsafe.Pointer(&data[0]))
-	if header.Magic != NavMeshMagic {
+	hdr, err := decodeMeshHeader(data)
+	if err != nil {
+		return err
+	}
+
+	if hdr.Magic != NavMeshMagic {
 		return ErrWrongMagic
 	}
-	if header.Version != NavMeshVersion {
+	if hdr.Version != NavMeshVersion {
 		return ErrWrongVersion
 	}
 
 	var params NavMeshParams
-	params.Orig = header.Bmin
-	params.TileWidth = header.Bmax[0] - header.Bmin[0]
-	params.TileHeight = header.Bmax[2] - header.Bmin[2]
+	params.Orig = hdr.Bmin
+	params.TileWidth = hdr.Bmax[0] - hdr.Bmin[0]
+	params.TileHeight = hdr.Bmax[2] - hdr.Bmin[2]
 	params.MaxTiles = 1
-	params.MaxPolys = header.PolyCount
+	params.MaxPolys = hdr.PolyCount
 
-	err := m.Init(&params)
-	if err != nil {
+	if err := m.Init(&params); err != nil {
 		return err
 	}
 
@@ -732,10 +735,10 @@ func (m *NavMesh) queryPolygonsInTile(tile *MeshTile, qmin, qmax [3]float32, pol
 
 // AddTile adds a tile to the navigation mesh.
 func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, error) {
-	if len(data) < int(unsafeSizeOfMeshHeader()) {
-		return 0, ErrInvalidParam
+	header, err := decodeMeshHeader(data)
+	if err != nil {
+		return 0, err
 	}
-	header := (*MeshHeader)(unsafe.Pointer(&data[0]))
 	if header.Magic != NavMeshMagic {
 		return 0, ErrWrongMagic
 	}
@@ -803,7 +806,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 
 	d := data[headerSize:]
 
-	tile.Header = header
+	tile.Header = &header
 
 	// Read verts
 
@@ -869,6 +872,41 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 
 	result := m.GetTileRef(tile)
 	return result, nil
+}
+
+// decodeMeshHeader safely decodes a MeshHeader from serialized data.
+// Uses field-by-field binary decoding to avoid alignment issues from casting
+// a []byte (1-byte aligned) directly to *MeshHeader (4-byte aligned required).
+func decodeMeshHeader(data []byte) (h MeshHeader, err error) {
+	if len(data) < int(unsafe.Sizeof(h)) {
+		return h, ErrInvalidParam
+	}
+	h.Magic = int32(binary.LittleEndian.Uint32(data[0:4]))
+	h.Version = int32(binary.LittleEndian.Uint32(data[4:8]))
+	h.X = int32(binary.LittleEndian.Uint32(data[8:12]))
+	h.Y = int32(binary.LittleEndian.Uint32(data[12:16]))
+	h.Layer = int32(binary.LittleEndian.Uint32(data[16:20]))
+	h.UserID = binary.LittleEndian.Uint32(data[20:24])
+	h.PolyCount = int32(binary.LittleEndian.Uint32(data[24:28]))
+	h.VertCount = int32(binary.LittleEndian.Uint32(data[28:32]))
+	h.MaxLinkCount = int32(binary.LittleEndian.Uint32(data[32:36]))
+	h.DetailMeshCount = int32(binary.LittleEndian.Uint32(data[36:40]))
+	h.DetailVertCount = int32(binary.LittleEndian.Uint32(data[40:44]))
+	h.DetailTriCount = int32(binary.LittleEndian.Uint32(data[44:48]))
+	h.BVNodeCount = int32(binary.LittleEndian.Uint32(data[48:52]))
+	h.OffMeshConCount = int32(binary.LittleEndian.Uint32(data[52:56]))
+	h.OffMeshBase = int32(binary.LittleEndian.Uint32(data[56:60]))
+	h.WalkableHeight = math.Float32frombits(binary.LittleEndian.Uint32(data[60:64]))
+	h.WalkableRadius = math.Float32frombits(binary.LittleEndian.Uint32(data[64:68]))
+	h.WalkableClimb = math.Float32frombits(binary.LittleEndian.Uint32(data[68:72]))
+	h.Bmin[0] = math.Float32frombits(binary.LittleEndian.Uint32(data[72:76]))
+	h.Bmin[1] = math.Float32frombits(binary.LittleEndian.Uint32(data[76:80]))
+	h.Bmin[2] = math.Float32frombits(binary.LittleEndian.Uint32(data[80:84]))
+	h.Bmax[0] = math.Float32frombits(binary.LittleEndian.Uint32(data[84:88]))
+	h.Bmax[1] = math.Float32frombits(binary.LittleEndian.Uint32(data[88:92]))
+	h.Bmax[2] = math.Float32frombits(binary.LittleEndian.Uint32(data[92:96]))
+	h.BVQuantFactor = math.Float32frombits(binary.LittleEndian.Uint32(data[96:100]))
+	return h, nil
 }
 
 // binary reader helpers using unsafe.Sizeof
