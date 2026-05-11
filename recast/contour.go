@@ -559,8 +559,7 @@ func onHull(a, b, nhull int, hull []int) bool {
 		return false
 	}
 
-	for j, i := nhull-1, 0; i < nhull; j = i {
-		i++
+	for j, i := nhull-1, 0; i < nhull; j, i = i, i+1 {
 		if a == hull[j] && b == hull[i] {
 			return true
 		}

@@ -261,8 +261,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 	minExtent := polyMinExtent(verts, nverts)
 
 	if sampleDist > 0 {
-		for i, j := 0, nin-1; i < nin; j = i {
-			i++
+		for i, j := 0, nin-1; i < nin; j, i = i, i+1 {
 
 			vj := in[j*3:]
 			vi := in[i*3:]
