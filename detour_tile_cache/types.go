@@ -4,20 +4,19 @@ package detour_tile_cache
 
 // Constants
 const (
-	TileCacheMagic   = 'D'<<24 | 'T'<<16 | 'L'<<8 | 'R' // 'DTLR'
+	TileCacheMagic   = 'D'<<24 | 'T'<<16 | 'L'<<8 | 'R'
 	TileCacheVersion = 1
 
 	TileCacheNullArea     = 0
 	TileCacheWalkableArea = 63
 	TileCacheNullIdx      = 0xffff
 
-	// MaxTouchedTiles is the maximum number of tiles an obstacle can touch.
 	MaxTouchedTiles = 8
 )
 
 // CompressedTileFlags
 const (
-	CompressedTileFreeData = 0x01 // Navmesh owns the tile memory and should free it.
+	CompressedTileFreeData = 0x01
 )
 
 // Obstacle state constants
@@ -31,8 +30,8 @@ const (
 // Obstacle type constants
 const (
 	ObstacleTypeCylinder    = 0
-	ObstacleTypeBox         = 1 // AABB
-	ObstacleTypeOrientedBox = 2 // OBB
+	ObstacleTypeBox         = 1
+	ObstacleTypeOrientedBox = 2
 )
 
 // ObstacleRequestAction constants
@@ -116,7 +115,7 @@ type CompressedTile struct {
 	Next           *CompressedTile
 }
 
-// ObstacleTypeCylinder represents a cylindrical obstacle.
+// ObstacleCylinder represents a cylindrical obstacle.
 type ObstacleCylinder struct {
 	Pos    [3]float32
 	Radius float32
@@ -207,8 +206,8 @@ type TileCacheAlloc interface {
 // TileCacheCompressor is the interface for data compression used by the tile cache.
 type TileCacheCompressor interface {
 	MaxCompressedSize(bufferSize int) int
-	Compress(buffer []uint8, compressed []uint8, compressedSize *int) error
-	Decompress(compressed []uint8, buffer []uint8, bufferSize *int) error
+	Compress(buffer []uint8, compressed []uint8) (int, error)
+	Decompress(compressed []uint8, buffer []uint8) (int, error)
 }
 
 // TileCacheMeshProcess is the interface for processing mesh data during tile building.
@@ -240,7 +239,7 @@ type NavMeshCreateParams struct {
 
 // NavMeshInterface defines the subset of NavMesh methods used by TileCache.
 type NavMeshInterface interface {
-	RemoveTile(ref uint32, data *[]uint8, dataSize *int) error
+	RemoveTile(ref uint32) ([]uint8, int, error)
 	GetTileRefAt(tx, ty, tlayer int32) uint32
 	AddTile(data []uint8, dataSize int, flags uint8, tileRef *uint32) error
 }

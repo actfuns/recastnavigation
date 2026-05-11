@@ -74,7 +74,7 @@ func BuildTileCacheLayer(comp TileCacheCompressor, header *TileCacheLayerHeader,
 	// Compress
 	compressed := data[headerSize:]
 	var compressedSize int
-	err := comp.Compress(buffer, compressed, &compressedSize)
+	compressedSize, err := comp.Compress(buffer, compressed)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -134,8 +134,7 @@ func DecompressTileCacheLayer(alloc TileCacheAlloc, comp TileCacheCompressor,
 	copy(ptrToSlice(header)[:headerSize], compressed[:headerSize])
 
 	// Decompress grid
-	var size int
-	err := comp.Decompress(compressed[headerSize:compressedSize], grids, &size)
+	_, err := comp.Decompress(compressed[headerSize:compressedSize], grids)
 	if err != nil {
 		alloc.Free(buffer)
 		return nil, err
@@ -380,10 +379,15 @@ type rcEdge struct {
 
 // BuildTileCacheContours builds contours from a tile cache layer.
 func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
-	walkableClimb int, maxError float32, lcset *TileCacheContourSet) error {
+	walkableClimb int, maxError float32) (*TileCacheContourSet, error) {
 
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
+
+	lcset := AllocTileCacheContourSet(alloc)
+	if lcset == nil {
+		return nil, detour.ErrOutOfMemory
+	}
 
 	lcset.NConts = int(layer.RegCount)
 	lcset.Conts = make([]TileCacheContour, lcset.NConts)
@@ -393,13 +397,13 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 
 	tempVerts := alloc.Alloc(maxTempVerts * 4)
 	if tempVerts == nil {
-		return detour.ErrOutOfMemory
+		return nil, detour.ErrOutOfMemory
 	}
 	defer alloc.Free(tempVerts)
 
 	tempPolyBytes := alloc.Alloc(maxTempVerts * 2)
 	if tempPolyBytes == nil {
-		return detour.ErrOutOfMemory
+		return nil, detour.ErrOutOfMemory
 	}
 	defer alloc.Free(tempPolyBytes)
 
@@ -430,7 +434,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 			cont.Area = layer.Areas[idx]
 
 			if !walkContour(layer, x, y, &temp) {
-				return detour.ErrBufferTooSmall
+				return nil, detour.ErrBufferTooSmall
 			}
 
 			simplifyContour(&temp, maxError)
@@ -440,7 +444,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 			if cont.NVerts > 0 {
 				cont.Verts = alloc.Alloc(4 * temp.nverts)
 				if cont.Verts == nil {
-					return detour.ErrOutOfMemory
+					return nil, detour.ErrOutOfMemory
 				}
 
 				for i, j := 0, temp.nverts-1; i < temp.nverts; j, i = i, i+1 {
@@ -448,9 +452,8 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 					v := temp.verts[j*4:]
 					vn := temp.verts[i*4:]
 					nei := vn[3] // The neighbour reg is stored at segment vertex of a segment.
-					shouldRemove := false
-					lh := getCornerHeight(layer, int(v[0]), int(v[1]), int(v[2]),
-						walkableClimb, &shouldRemove)
+					lh, shouldRemove := getCornerHeight(layer, int(v[0]), int(v[1]), int(v[2]),
+						walkableClimb)
 
 					dst[0] = v[0]
 					dst[1] = lh
@@ -469,7 +472,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 		}
 	}
 
-	return nil
+	return lcset, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -486,21 +489,21 @@ func computeVertexHash2(x, y, z int) int {
 	return int(n & (vertexBucketCount2 - 1))
 }
 
-func addVertex(x, y, z uint16, verts []uint16, firstVert []uint16, nextVert []uint16, nv *int) uint16 {
+func addVertex(x, y, z uint16, verts []uint16, firstVert []uint16, nextVert []uint16, nv int) (uint16, int) {
 	bucket := computeVertexHash2(int(x), 0, int(z))
 	i := firstVert[bucket]
 
 	for i != TileCacheNullIdx {
 		v := verts[int(i)*3:]
 		if v[0] == x && v[2] == z && absInt(int(v[1])-int(y)) <= 2 {
-			return i
+			return i, nv
 		}
 		i = nextVert[i]
 	}
 
 	// Could not find, create new.
-	i = uint16(*nv)
-	*nv++
+	i = uint16(nv)
+	nv++
 	v := verts[int(i)*3:]
 	v[0] = x
 	v[1] = y
@@ -508,11 +511,16 @@ func addVertex(x, y, z uint16, verts []uint16, firstVert []uint16, nextVert []ui
 	nextVert[i] = firstVert[bucket]
 	firstVert[bucket] = i
 
-	return i
+	return i, nv
 }
 
 // BuildTileCachePolyMesh builds a polygon mesh from a contour set.
-func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, mesh *TileCachePolyMesh) error {
+func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet) (*TileCachePolyMesh, error) {
+	mesh := AllocTileCachePolyMesh(alloc)
+	if mesh == nil {
+		return nil, detour.ErrOutOfMemory
+	}
+
 	maxVertices := 0
 	maxTris := 0
 	maxVertsPerCont := 0
@@ -572,8 +580,8 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 		// Add and merge vertices.
 		for j := 0; j < cont.NVerts; j++ {
 			v := cont.Verts[j*4:]
-			indices[j] = addVertex(uint16(v[0]), uint16(v[1]), uint16(v[2]),
-				mesh.Verts, firstVert, nextVert, &mesh.NVerts)
+			indices[j], mesh.NVerts = addVertex(uint16(v[0]), uint16(v[1]), uint16(v[2]),
+				mesh.Verts, firstVert, nextVert, mesh.NVerts)
 			if v[3]&0x80 != 0 {
 				vflags[indices[j]] = 1
 			}
@@ -608,8 +616,7 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 					pj := polys[j*maxVertsPerPoly:]
 					for k := j + 1; k < npolys; k++ {
 						pk := polys[k*maxVertsPerPoly:]
-						ea, eb := 0, 0
-						v := getPolyMergeValue(pj, pk, mesh.Verts, &ea, &eb)
+							v, ea, eb := getPolyMergeValue(pj, pk, mesh.Verts)
 						if v > bestMergeVal {
 							bestMergeVal = v
 							bestPa = j
@@ -642,8 +649,8 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 			mesh.Areas[mesh.NPolys] = cont.Area
 			mesh.NPolys++
 			if mesh.NPolys > maxTris {
-				return detour.ErrBufferTooSmall
-			}
+					return nil, detour.ErrBufferTooSmall
+				}
 		}
 	}
 
@@ -655,7 +662,7 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 			}
 			err := removeVertex(mesh, uint16(i), maxTris)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			// Remove vertex - mesh.NVerts is already decremented inside removeVertex()
 			for j := i; j < mesh.NVerts; j++ {
@@ -667,10 +674,10 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 
 	// Calculate adjacency.
 	if !buildMeshAdjacency(mesh.Polys, mesh.NPolys, mesh.Verts, mesh.NVerts, lcset) {
-		return detour.ErrOutOfMemory
+		return nil, detour.ErrOutOfMemory
 	}
 
-	return nil
+	return mesh, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -678,8 +685,8 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 // ---------------------------------------------------------------------------
 
 // MarkCylinderArea marks a cylindrical area in the tile cache layer.
-func MarkCylinderArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
-	pos *[3]float32, radius, height float32, areaId uint8) error {
+func MarkCylinderArea(layer *TileCacheLayer, orig [3]float32, cs, ch float32,
+	pos [3]float32, radius, height float32, areaId uint8) error {
 
 	var bmin, bmax [3]float32
 	bmin[0] = pos[0] - radius
@@ -742,8 +749,8 @@ func MarkCylinderArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
 }
 
 // MarkBoxArea marks an axis-aligned box area in the tile cache layer.
-func MarkBoxArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
-	bmin, bmax *[3]float32, areaId uint8) error {
+func MarkBoxArea(layer *TileCacheLayer, orig [3]float32, cs, ch float32,
+	bmin, bmax [3]float32, areaId uint8) error {
 
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
@@ -788,8 +795,8 @@ func MarkBoxArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
 }
 
 // MarkBoxAreaOriented marks an oriented box area in the tile cache layer.
-func MarkBoxAreaOriented(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
-	center, halfExtents *[3]float32, rotAux *[2]float32, areaId uint8) error {
+func MarkBoxAreaOriented(layer *TileCacheLayer, orig [3]float32, cs, ch float32,
+	center, halfExtents [3]float32, rotAux [2]float32, areaId uint8) error {
 
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
@@ -1243,7 +1250,7 @@ func simplifyContour(cont *dtTempContour, maxError float32) {
 	}
 }
 
-func getCornerHeight(layer *TileCacheLayer, x, y, z, walkableClimb int, shouldRemove *bool) uint8 {
+func getCornerHeight(layer *TileCacheLayer, x, y, z, walkableClimb int) (uint8, bool) {
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
 
@@ -1283,12 +1290,12 @@ func getCornerHeight(layer *TileCacheLayer, x, y, z, walkableClimb int, shouldRe
 		}
 	}
 
-	*shouldRemove = false
+	shouldRemove := false
 	if n > 1 && portalCount == 1 && allSameReg {
-		*shouldRemove = true
+		shouldRemove = true
 	}
 
-	return height
+	return height, shouldRemove
 }
 
 func buildMeshAdjacency(polys []uint16, npolys int,
@@ -1655,16 +1662,15 @@ func uleft(a, b, c []uint16) bool {
 		(int(c[0])-int(a[0]))*(int(b[2])-int(a[2])) < 0
 }
 
-func getPolyMergeValue(pa, pb []uint16, verts []uint16, ea, eb *int) int {
+func getPolyMergeValue(pa, pb []uint16, verts []uint16) (int, int, int) {
 	na := countPolyVerts(pa)
 	nb := countPolyVerts(pb)
 
 	if na+nb-2 > maxVertsPerPoly {
-		return -1
+		return -1, -1, -1
 	}
 
-	*ea = -1
-	*eb = -1
+	ea, eb := -1, -1
 
 	for i := 0; i < na; i++ {
 		va0 := pa[i]
@@ -1679,38 +1685,38 @@ func getPolyMergeValue(pa, pb []uint16, verts []uint16, ea, eb *int) int {
 				vb0, vb1 = vb1, vb0
 			}
 			if va0 == vb0 && va1 == vb1 {
-				*ea = i
-				*eb = j
+				ea = i
+				eb = j
 				break
 			}
 		}
 	}
 
-	if *ea == -1 || *eb == -1 {
-		return -1
+	if ea == -1 || eb == -1 {
+		return -1, -1, -1
 	}
 
-	va := pa[(*ea+na-1)%na]
-	vb := pa[*ea]
-	vc := pb[(*eb+2)%nb]
+	va := pa[(ea+na-1)%na]
+	vb := pa[ea]
+	vc := pb[(eb+2)%nb]
 	if !uleft(verts[va*3:], verts[vb*3:], verts[vc*3:]) {
-		return -1
+		return -1, ea, eb
 	}
 
-	va = pb[(*eb+nb-1)%nb]
-	vb = pb[*eb]
-	vc = pa[(*ea+2)%na]
+	va = pb[(eb+nb-1)%nb]
+	vb = pb[eb]
+	vc = pa[(ea+2)%na]
 	if !uleft(verts[va*3:], verts[vb*3:], verts[vc*3:]) {
-		return -1
+		return -1, ea, eb
 	}
 
-	va = pa[*ea]
-	vb = pa[(*ea+1)%na]
+	va = pa[ea]
+	vb = pa[(ea+1)%na]
 
 	dx := int(verts[va*3+0]) - int(verts[vb*3+0])
 	dy := int(verts[va*3+2]) - int(verts[vb*3+2])
 
-	return dx*dx + dy*dy
+	return dx*dx + dy*dy, ea, eb
 }
 
 func mergePolys(pa, pb []uint16, ea, eb int) {
@@ -1735,17 +1741,18 @@ func mergePolys(pa, pb []uint16, ea, eb int) {
 	copy(pa, tmp[:maxVertsPerPoly])
 }
 
-func pushFront(v uint16, arr []uint16, an *int) {
-	*an++
-	for i := *an - 1; i > 0; i-- {
+func pushFront(v uint16, arr []uint16, an int) int {
+	an++
+	for i := an - 1; i > 0; i-- {
 		arr[i] = arr[i-1]
 	}
 	arr[0] = v
+	return an
 }
 
-func pushBack(v uint16, arr []uint16, an *int) {
-	arr[*an] = v
-	*an++
+func pushBack(v uint16, arr []uint16, an int) int {
+	arr[an] = v
+	return an + 1
 }
 
 func canRemoveVertex(mesh *TileCachePolyMesh, rem uint16) bool {
@@ -1894,8 +1901,8 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) error {
 		return nil
 	}
 
-	pushBack(edges[0], hole[:], &nhole)
-	pushBack(edges[2], harea[:], &nharea)
+	nhole = pushBack(edges[0], hole[:], nhole)
+	nharea = pushBack(edges[2], harea[:], nharea)
 
 	for nedges > 0 {
 		match := false
@@ -1909,15 +1916,15 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) error {
 				if nhole >= maxRemEdges {
 					return detour.ErrBufferTooSmall
 				}
-				pushFront(ea, hole[:], &nhole)
-				pushFront(a, harea[:], &nharea)
+				nhole = pushFront(ea, hole[:], nhole)
+				nharea = pushFront(a, harea[:], nharea)
 				add = true
 			} else if hole[nhole-1] == ea {
 				if nhole >= maxRemEdges {
 					return detour.ErrBufferTooSmall
 				}
-				pushBack(eb, hole[:], &nhole)
-				pushBack(a, harea[:], &nharea)
+				nhole = pushBack(eb, hole[:], nhole)
+				nharea = pushBack(a, harea[:], nharea)
 				add = true
 			}
 			if add {
@@ -1989,8 +1996,7 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) error {
 				pj := polys[j*maxVertsPerPoly:]
 				for k := j + 1; k < npolys; k++ {
 					pk := polys[k*maxVertsPerPoly:]
-					ea, eb := 0, 0
-					v := getPolyMergeValue(pj, pk, mesh.Verts, &ea, &eb)
+					v, ea, eb := getPolyMergeValue(pj, pk, mesh.Verts)
 					if v > bestMergeVal {
 						bestMergeVal = v
 						bestPa = j

@@ -14,7 +14,7 @@ const (
 	DrawNavMeshColorTiles  DrawNavMeshFlags = 0x04
 )
 
-func distancePtLine2d(pt, p, q []float32) float32 {
+func distancePtLine2d(pt, p, q [3]float32) float32 {
 	pqx := q[0] - p[0]
 	pqz := q[2] - p[2]
 	dx := pt[0] - p[0]
@@ -88,10 +88,18 @@ func drawPolyBoundaries(dd DebugDraw, tile *detour.MeshTile, col uint32, linew f
 					if detour.GetDetailTriEdgeFlags(t[3], n)&detour.DetailEdgeBoundary == 0 {
 						continue
 					}
-					if distancePtLine2d(tv[n], v0, v1) < thr &&
-						distancePtLine2d(tv[m], v0, v1) < thr {
-						dd.VertexPosColor(tv[n], c)
-						dd.VertexPosColor(tv[m], c)
+					if distancePtLine2d(
+						[3]float32{tv[n][0], tv[n][1], tv[n][2]},
+						[3]float32{v0[0], v0[1], v0[2]},
+						[3]float32{v1[0], v1[1], v1[2]},
+					) < thr &&
+						distancePtLine2d(
+							[3]float32{tv[m][0], tv[m][1], tv[m][2]},
+							[3]float32{v0[0], v0[1], v0[2]},
+							[3]float32{v1[0], v1[1], v1[2]},
+						) < thr {
+						dd.VertexPosColor([3]float32{tv[n][0], tv[n][1], tv[n][2]}, c)
+						dd.VertexPosColor([3]float32{tv[m][0], tv[m][1], tv[m][2]}, c)
 					}
 				}
 			}
@@ -132,9 +140,14 @@ func drawMeshTile(dd DebugDraw, mesh *detour.NavMesh, query *detour.NavMeshQuery
 			t := tile.DetailTris[(pd.TriBase+uint32(j))*4:]
 			for k := 0; k < 3; k++ {
 				if t[k] < p.VertCount {
-					dd.VertexPosColor(tile.Verts[p.Verts[t[k]]*3:p.Verts[t[k]]*3+3], col)
+					dd.VertexPosColor([3]float32{tile.Verts[p.Verts[t[k]]*3], tile.Verts[p.Verts[t[k]]*3+1], tile.Verts[p.Verts[t[k]]*3+2]}, col)
 				} else {
-					dd.VertexPosColor(tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3:(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+3], col)
+					dd.VertexPosColor(
+							[3]float32{
+								tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3],
+								tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+1],
+								tile.DetailVerts[(pd.VertBase+uint32(t[k])-uint32(p.VertCount))*3+2],
+							}, col)
 				}
 			}
 		}
@@ -177,7 +190,7 @@ func drawMeshTile(dd DebugDraw, mesh *detour.NavMesh, query *detour.NavMeshQuery
 				}
 			}
 
-			dd.VertexPosColor(va, col)
+			dd.VertexPosColor([3]float32{va[0], va[1], va[2]}, col)
 			dd.VertexXYZColor(con.Pos[0], con.Pos[1], con.Pos[2], col)
 			col2 = col
 			if !startSet {
@@ -185,7 +198,7 @@ func drawMeshTile(dd DebugDraw, mesh *detour.NavMesh, query *detour.NavMeshQuery
 			}
 			AppendCircle(dd, con.Pos[0], con.Pos[1]+0.1, con.Pos[2], con.Rad, col2)
 
-			dd.VertexPosColor(vb, col)
+			dd.VertexPosColor([3]float32{vb[0], vb[1], vb[2]}, col)
 			dd.VertexXYZColor(con.Pos[3], con.Pos[4], con.Pos[5], col)
 			col2 = col
 			if !endSet {
@@ -212,7 +225,7 @@ func drawMeshTile(dd DebugDraw, mesh *detour.NavMesh, query *detour.NavMeshQuery
 	dd.Begin(DrawPoints, 3.0)
 	for i := 0; i < int(tile.Header.VertCount); i++ {
 		v := tile.Verts[i*3 : i*3+3]
-		dd.VertexPosColor(v, vcol)
+		dd.VertexPosColor([3]float32{v[0], v[1], v[2]}, vcol)
 	}
 	dd.End()
 
@@ -485,9 +498,19 @@ func DebugDrawNavMeshPoly(dd DebugDraw, mesh *detour.NavMesh, ref detour.PolyRef
 			t := tile.DetailTris[(pd.TriBase+uint32(i))*4:]
 			for j := 0; j < 3; j++ {
 				if t[j] < poly.VertCount {
-					dd.VertexPosColor(tile.Verts[poly.Verts[t[j]]*3:poly.Verts[t[j]]*3+3], c)
+					dd.VertexPosColor(
+								[3]float32{
+									tile.Verts[poly.Verts[t[j]]*3],
+									tile.Verts[poly.Verts[t[j]]*3+1],
+									tile.Verts[poly.Verts[t[j]]*3+2],
+								}, c)
 				} else {
-					dd.VertexPosColor(tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3:(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+3], c)
+					dd.VertexPosColor(
+								[3]float32{
+									tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3],
+									tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+1],
+									tile.DetailVerts[(pd.VertBase+uint32(t[j])-uint32(poly.VertCount))*3+2],
+								}, c)
 				}
 			}
 		}
@@ -636,7 +659,7 @@ func DebugDrawTileCacheLayerRegions(dd DebugDraw, layer *tc.TileCacheLayer, cs, 
 }
 
 // DebugDrawTileCacheContours draws tile cache contours.
-func DebugDrawTileCacheContours(dd DebugDraw, lcset *tc.TileCacheContourSet, orig []float32, cs, ch float32) {
+func DebugDrawTileCacheContours(dd DebugDraw, lcset *tc.TileCacheContourSet, orig [3]float32, cs, ch float32) {
 	if dd == nil {
 		return
 	}
@@ -698,7 +721,7 @@ func DebugDrawTileCacheContours(dd DebugDraw, lcset *tc.TileCacheContourSet, ori
 }
 
 // DebugDrawTileCachePolyMesh draws tile cache poly mesh.
-func DebugDrawTileCachePolyMesh(dd DebugDraw, lmesh *tc.TileCachePolyMesh, orig []float32, cs, ch float32) {
+func DebugDrawTileCachePolyMesh(dd DebugDraw, lmesh *tc.TileCachePolyMesh, orig [3]float32, cs, ch float32) {
 	if dd == nil {
 		return
 	}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/actfuns/recastnavigation/detour"
 	"math"
-	"unsafe"
 )
 
 const (
@@ -152,7 +151,7 @@ func (c *Crowd) UpdateAgentParameters(idx int, params *CrowdAgentParams) {
 }
 
 // AddAgent adds a new agent to the crowd.
-func (c *Crowd) AddAgent(pos *[3]float32, params *CrowdAgentParams) int {
+func (c *Crowd) AddAgent(pos [3]float32, params *CrowdAgentParams) int {
 	// Find empty slot
 	idx := -1
 	for i := 0; i < c.maxAgents; i++ {
@@ -172,18 +171,18 @@ func (c *Crowd) AddAgent(pos *[3]float32, params *CrowdAgentParams) int {
 	// Find nearest position on navmesh and place the agent there.
 	var nearest [3]float32
 	var ref PolyRef
-	nearest = *pos
+	nearest = pos
 
 	queryFilter := c.getFilter(ag.params.QueryFilterType)
 	if queryFilter != nil {
-		r, nearestPt, _ := c.navquery.FindNearestPoly(*pos, c.agentPlacementHalfExtents, queryFilter)
+		r, nearestPt, _ := c.navquery.FindNearestPoly(pos, c.agentPlacementHalfExtents, queryFilter)
 		ref = r
 		if ref != 0 {
 			nearest = nearestPt
 		}
 	}
 
-	ag.corridor.Reset(ref, &nearest)
+	ag.corridor.Reset(ref, nearest)
 	ag.boundary.Reset()
 	ag.partial = false
 
@@ -218,7 +217,7 @@ func (c *Crowd) RemoveAgent(idx int) {
 }
 
 // RequestMoveTarget submits a new move target request for the specified agent.
-func (c *Crowd) RequestMoveTarget(idx int, ref PolyRef, pos *[3]float32) bool {
+func (c *Crowd) RequestMoveTarget(idx int, ref PolyRef, pos [3]float32) bool {
 	if idx < 0 || idx >= c.maxAgents {
 		return false
 	}
@@ -229,7 +228,7 @@ func (c *Crowd) RequestMoveTarget(idx int, ref PolyRef, pos *[3]float32) bool {
 	ag := &c.agents[idx]
 
 	ag.targetRef = ref
-	ag.targetPos = *pos
+	ag.targetPos = pos
 	ag.targetPathqRef = 0
 	ag.targetReplan = false
 	if ag.targetRef != 0 {
@@ -241,7 +240,7 @@ func (c *Crowd) RequestMoveTarget(idx int, ref PolyRef, pos *[3]float32) bool {
 	return true
 }
 
-func (c *Crowd) RequestMoveTargetReplan(idx int, ref PolyRef, pos *[3]float32) bool {
+func (c *Crowd) RequestMoveTargetReplan(idx int, ref PolyRef, pos [3]float32) bool {
 	if idx < 0 || idx >= c.maxAgents {
 		return false
 	}
@@ -249,7 +248,7 @@ func (c *Crowd) RequestMoveTargetReplan(idx int, ref PolyRef, pos *[3]float32) b
 	ag := &c.agents[idx]
 
 	ag.targetRef = ref
-	ag.targetPos = *pos
+	ag.targetPos = pos
 	ag.targetPathqRef = 0
 	ag.targetReplan = true
 	if ag.targetRef != 0 {
@@ -262,7 +261,7 @@ func (c *Crowd) RequestMoveTargetReplan(idx int, ref PolyRef, pos *[3]float32) b
 }
 
 // RequestMoveVelocity submits a velocity-based move request.
-func (c *Crowd) RequestMoveVelocity(idx int, vel *[3]float32) bool {
+func (c *Crowd) RequestMoveVelocity(idx int, vel [3]float32) bool {
 	if idx < 0 || idx >= c.maxAgents {
 		return false
 	}
@@ -270,7 +269,7 @@ func (c *Crowd) RequestMoveVelocity(idx int, vel *[3]float32) bool {
 	ag := &c.agents[idx]
 
 	ag.targetRef = 0
-	ag.targetPos = *vel
+	ag.targetPos = vel
 	ag.targetPathqRef = 0
 	ag.targetReplan = false
 	ag.targetState = CrowdAgentTargetVelocity
@@ -351,15 +350,15 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 		updateThr := ag.params.CollisionQueryRange * 0.25
 		queryFilter := c.getFilter(ag.params.QueryFilterType)
 		if queryFilter != nil {
-			if vecDist2DSqr(&ag.npos, ag.boundary.GetCenter()) > updateThr*updateThr ||
+			if vecDist2DSqr(ag.npos, *ag.boundary.GetCenter()) > updateThr*updateThr ||
 				!ag.boundary.IsValid(c.navquery, queryFilter) {
-				ag.boundary.Update(ag.corridor.GetFirstPoly(), &ag.npos,
+				ag.boundary.Update(ag.corridor.GetFirstPoly(), ag.npos,
 					ag.params.CollisionQueryRange, c.navquery, queryFilter)
 			}
 		}
 
 		// Query neighbour agents
-		ag.nneis = c.getNeighbours(&ag.npos, ag.params.Height, ag.params.CollisionQueryRange,
+		ag.nneis = c.getNeighbours(ag.npos, ag.params.Height, ag.params.CollisionQueryRange,
 			ag, ag.neis[:], CrowdAgentMaxNeighbours, agents, nagents, c.grid)
 		for j := 0; j < ag.nneis; j++ {
 			ag.neis[j].Idx = c.getAgentIndex(agents[ag.neis[j].Idx])
@@ -388,12 +387,12 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 
 		// Check to see if the corner after the next corner is directly visible.
 		if ag.params.UpdateFlags&CrowdOptimizeVis != 0 && ag.ncorners > 0 {
-			target := (*[3]float32)(unsafe.Pointer((*[3]float32)(unsafe.Pointer(&ag.cornerVerts[recastMin(1, ag.ncorners-1)*3]))))
+			target := cornerVert(ag.cornerVerts[:], recastMin(1, ag.ncorners-1))
 			ag.corridor.OptimizePathVisibility(target, ag.params.PathOptimizationRange, c.navquery, queryFilter)
 
 			if debugIdx == i {
-				debug.OptStart = *ag.corridor.GetPos()
-				debug.OptEnd = *target
+				debug.OptStart = ag.corridor.GetPos()
+				debug.OptEnd = target
 			}
 		} else {
 			if debugIdx == i {
@@ -424,12 +423,12 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 			// Adjust the path over the off-mesh connection.
 			var refs [2]PolyRef
 			if ag.corridor.MoveOverOffmeshConnection(ag.cornerPolys[ag.ncorners-1], &refs,
-				&anim.StartPos, &anim.EndPos, c.navquery) {
+				anim.StartPos, anim.EndPos, c.navquery) {
 				anim.InitPos = ag.npos
 				anim.PolyRef = int64(refs[1])
 				anim.Active = true
 				anim.T = 0
-				anim.TMax = (vecDist2D(&anim.StartPos, &anim.EndPos) / ag.params.MaxSpeed) * 0.5
+				anim.TMax = (vecDist2D(anim.StartPos, anim.EndPos) / ag.params.MaxSpeed) * 0.5
 
 				ag.state = CrowdAgentStateOffMesh
 				ag.ncorners = 0
@@ -454,13 +453,13 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 
 		if ag.targetState == CrowdAgentTargetVelocity {
 			dvel = ag.targetPos
-			ag.desiredSpeed = vecLen(&ag.targetPos)
+			ag.desiredSpeed = vecLen(ag.targetPos)
 		} else {
 			// Calculate steering direction.
 			if ag.params.UpdateFlags&CrowdAnticipateTurns != 0 {
-				calcSmoothSteerDirection(ag, &dvel)
+				dvel = calcSmoothSteerDirection(ag)
 			} else {
-				calcStraightSteerDirection(ag, &dvel)
+				dvel = calcStraightSteerDirection(ag)
 			}
 
 			// Calculate speed scale
@@ -468,7 +467,7 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 			speedScale := getDistanceToGoal(ag, slowDownRadius) / slowDownRadius
 
 			ag.desiredSpeed = ag.params.MaxSpeed
-			vecScale(&dvel, ag.desiredSpeed*speedScale)
+			dvel = vecScale(dvel, ag.desiredSpeed*speedScale)
 		}
 
 		// Separation
@@ -483,11 +482,10 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 			for j := 0; j < ag.nneis; j++ {
 				nei := &c.agents[ag.neis[j].Idx]
 
-				var diff [3]float32
-				vecSub(&diff, &ag.npos, &nei.npos)
+				diff := vecSub(ag.npos, nei.npos)
 				diff[1] = 0
 
-				distSqr := vecLenSqr(&diff)
+				distSqr := vecLenSqr(diff)
 				if distSqr < 0.00001 {
 					continue
 				}
@@ -497,18 +495,18 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 				dist := float32(math.Sqrt(float64(distSqr)))
 				weight := separationWeight * (1.0 - (dist*invSeparationDist)*(dist*invSeparationDist))
 
-				vecMad(&disp, &disp, &diff, weight/dist)
+				disp = vecMad(disp, diff, weight/dist)
 				w += 1.0
 			}
 
 			if w > 0.0001 {
 				// Adjust desired velocity.
-				vecMad(&dvel, &dvel, &disp, 1.0/w)
+				dvel = vecMad(dvel, disp, 1.0/w)
 				// Clamp desired velocity to desired speed.
-				speedSqr := vecLenSqr(&dvel)
+				speedSqr := vecLenSqr(dvel)
 				desiredSqr := ag.desiredSpeed * ag.desiredSpeed
 				if speedSqr > desiredSqr {
-					vecScale(&dvel, desiredSqr/speedSqr)
+					dvel = vecScale(dvel, desiredSqr/speedSqr)
 				}
 			}
 		}
@@ -531,16 +529,16 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 			// Add neighbours as obstacles.
 			for j := 0; j < ag.nneis; j++ {
 				nei := &c.agents[ag.neis[j].Idx]
-				c.obstacleQuery.AddCircle(&nei.npos, nei.params.Radius, &nei.vel, &nei.dvel)
+				c.obstacleQuery.AddCircle(nei.npos, nei.params.Radius, nei.vel, nei.dvel)
 			}
 
 			// Append neighbour segments as obstacles.
 			for j := 0; j < ag.boundary.GetSegmentCount(); j++ {
 				s := ag.boundary.GetSegment(j)
-				if triArea2D(&ag.npos, &[3]float32{s[0], s[1], s[2]}, &[3]float32{s[3], s[4], s[5]}) < 0 {
+				if triArea2D(ag.npos, [3]float32{s[0], s[1], s[2]}, [3]float32{s[3], s[4], s[5]}) < 0 {
 					continue
 				}
-				c.obstacleQuery.AddSegment(&[3]float32{s[0], s[1], s[2]}, &[3]float32{s[3], s[4], s[5]})
+				c.obstacleQuery.AddSegment([3]float32{s[0], s[1], s[2]}, [3]float32{s[3], s[4], s[5]})
 			}
 
 			var vod *ObstacleAvoidanceDebugData
@@ -551,8 +549,9 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 			// Sample new safe velocity.
 			params := &c.obstacleQueryParams[ag.params.ObstacleAvoidanceType]
 
-			ns := c.obstacleQuery.SampleVelocityAdaptive(&ag.npos, ag.params.Radius, ag.desiredSpeed,
-				&ag.vel, &ag.dvel, &ag.nvel, params, vod)
+			nvel, ns := c.obstacleQuery.SampleVelocityAdaptive(ag.npos, ag.params.Radius, ag.desiredSpeed,
+				ag.vel, ag.dvel, params, vod)
+			ag.nvel = nvel
 			c.velocitySampleCount += ns
 		} else {
 			ag.nvel = ag.dvel
@@ -587,11 +586,10 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 				nei := &c.agents[ag.neis[j].Idx]
 				idx1 := c.getAgentIndex(nei)
 
-				var diff [3]float32
-				vecSub(&diff, &ag.npos, &nei.npos)
+				diff := vecSub(ag.npos, nei.npos)
 				diff[1] = 0
 
-				distSq := vecLenSqr(&diff)
+				distSq := vecLenSqr(diff)
 				if distSq > (ag.params.Radius+nei.params.Radius)*(ag.params.Radius+nei.params.Radius) {
 					continue
 				}
@@ -608,12 +606,12 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 					pen = (1.0 / dist) * (pen * 0.5) * collisionResolveFactor
 				}
 
-				vecMad(&ag.disp, &ag.disp, &diff, pen)
+				ag.disp = vecMad(ag.disp, diff, pen)
 				w += 1.0
 			}
 
 			if w > 0.0001 {
-				vecScale(&ag.disp, 1.0/w)
+				ag.disp = vecScale(ag.disp, 1.0/w)
 			}
 		}
 
@@ -622,7 +620,7 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 			if ag.state != CrowdAgentStateWalking {
 				continue
 			}
-			vecAdd(&ag.npos, &ag.npos, &ag.disp)
+			ag.npos = vecAdd(ag.npos, ag.disp)
 		}
 	}
 
@@ -633,13 +631,13 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 		}
 
 		// Move along navmesh.
-		ag.corridor.MovePosition(&ag.npos, c.navquery, c.getFilter(ag.params.QueryFilterType))
+		ag.corridor.MovePosition(ag.npos, c.navquery, c.getFilter(ag.params.QueryFilterType))
 		// Get valid constrained position back.
-		ag.npos = *ag.corridor.GetPos()
+		ag.npos = ag.corridor.GetPos()
 
 		// If not using path, truncate the corridor to just one poly.
 		if ag.targetState == CrowdAgentTargetNone || ag.targetState == CrowdAgentTargetVelocity {
-			ag.corridor.Reset(ag.corridor.GetFirstPoly(), &ag.npos)
+			ag.corridor.Reset(ag.corridor.GetFirstPoly(), ag.npos)
 			ag.partial = false
 		}
 	}
@@ -667,10 +665,10 @@ func (c *Crowd) Update(dt float32, debug *CrowdAgentDebugInfo) {
 		tb := anim.TMax
 		if anim.T < ta {
 			u := tween(anim.T, 0, ta)
-			vecLerp(&ag.npos, &anim.InitPos, &anim.StartPos, u)
+			ag.npos = vecLerp(anim.InitPos, anim.StartPos, u)
 		} else {
 			u := tween(anim.T, ta, tb)
-			vecLerp(&ag.npos, &anim.StartPos, &anim.EndPos, u)
+			ag.npos = vecLerp(anim.StartPos, anim.EndPos, u)
 		}
 
 		// Update velocity.
@@ -774,7 +772,6 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 
 		if ag.targetState == CrowdAgentTargetRequesting {
 			path := ag.corridor.GetPath()
-			npath := ag.corridor.GetPathCount()
 
 			const maxRes = 32
 			var reqPos [3]float32
@@ -785,19 +782,15 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 			const maxIter = 20
 			queryFilter := c.getFilter(ag.params.QueryFilterType)
 
-			c.navquery.InitSlicedFindPath(path[0], ag.targetRef, ag.npos, ag.targetPos, queryFilter)
-			c.navquery.UpdateSlicedFindPath(maxIter, nil)
+			c.navquery.FindPathSliced(path[0], ag.targetRef, ag.npos, ag.targetPos, queryFilter, 0)
+			c.navquery.UpdateSlicedPath(maxIter)
 
 			var err error
-			if ag.targetReplan {
-				err = c.navquery.FinalizeSlicedFindPathPartial(path[:npath], npath, reqPath, &reqPathCount, maxRes)
-			} else {
-				err = c.navquery.FinalizeSlicedFindPath(reqPath, &reqPathCount, maxRes)
-			}
+			reqPathCount, err = c.navquery.GetPathFromSlicedPath(reqPath, maxRes)
 
 			if err == nil && reqPathCount > 0 {
 				if reqPath[reqPathCount-1] != ag.targetRef {
-					err = c.navquery.ClosestPointOnPoly(reqPath[reqPathCount-1], ag.targetPos, &reqPos, nil)
+					reqPos, _, err = c.navquery.ClosestPointOnPoly(reqPath[reqPathCount-1], ag.targetPos)
 					if err != nil {
 						reqPathCount = 0
 					}
@@ -814,7 +807,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 				reqPathCount = 1
 			}
 
-			ag.corridor.SetCorridor(&reqPos, reqPath, reqPathCount)
+			ag.corridor.SetCorridor(reqPos, reqPath, reqPathCount)
 			ag.boundary.Reset()
 			ag.partial = false
 
@@ -835,7 +828,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 	for _, ag := range queue {
 		queryFilter := c.getFilter(ag.params.QueryFilterType)
 		ag.targetPathqRef = c.pathQueue.Request(ag.corridor.GetLastPoly(), ag.targetRef,
-			ag.corridor.GetTarget(), &ag.targetPos, queryFilter)
+			ag.corridor.GetTarget(), ag.targetPos, queryFilter)
 		if ag.targetPathqRef != 0 {
 			ag.targetState = CrowdAgentTargetWaitingForPath
 		}
@@ -872,7 +865,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 				res := c.pathResult
 				valid := true
 				nres := 0
-				err := c.pathQueue.GetPathResult(ag.targetPathqRef, res, &nres, c.maxPathResult)
+				nres, err := c.pathQueue.GetPathResult(ag.targetPathqRef, res, c.maxPathResult)
 				if err != nil || nres == 0 {
 					valid = false
 				}
@@ -914,7 +907,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 					// Check for partial path.
 					if res[nres-1] != ag.targetRef {
 						var nearest [3]float32
-						err := c.navquery.ClosestPointOnPoly(res[nres-1], targetPos, &nearest, nil)
+						nearest, _, err = c.navquery.ClosestPointOnPoly(res[nres-1], targetPos)
 						if err == nil {
 							targetPos = nearest
 						} else {
@@ -924,7 +917,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 				}
 
 				if valid {
-					ag.corridor.SetCorridor(&targetPos, res, nres)
+					ag.corridor.SetCorridor(targetPos, res, nres)
 					ag.boundary.Reset()
 					ag.targetState = CrowdAgentTargetValid
 				} else {
@@ -1002,14 +995,14 @@ func (c *Crowd) checkPathValidity(agents []*CrowdAgent, nagents int, dt float32)
 				nearest = nearestPt
 			} else {
 				// Could not find location in navmesh, set state to invalid.
-				ag.corridor.Reset(0, &agentPos)
+				ag.corridor.Reset(0, agentPos)
 				ag.partial = false
 				ag.boundary.Reset()
 				ag.state = CrowdAgentStateInvalid
 				continue
 			}
 
-			ag.corridor.FixPathStart(agentRef, &nearest)
+			ag.corridor.FixPathStart(agentRef, nearest)
 			ag.boundary.Reset()
 			ag.npos = nearest
 			replan = true
@@ -1034,7 +1027,7 @@ func (c *Crowd) checkPathValidity(agents []*CrowdAgent, nagents int, dt float32)
 				replan = true
 			}
 			if ag.targetRef == 0 {
-				ag.corridor.Reset(agentRef, &ag.npos)
+				ag.corridor.Reset(agentRef, ag.npos)
 				ag.partial = false
 				ag.targetState = CrowdAgentTargetNone
 			}
@@ -1057,13 +1050,13 @@ func (c *Crowd) checkPathValidity(agents []*CrowdAgent, nagents int, dt float32)
 		// Try to replan path to goal.
 		if replan {
 			if ag.targetState != CrowdAgentTargetNone {
-				c.RequestMoveTargetReplan(idx, ag.targetRef, &ag.targetPos)
+				c.RequestMoveTargetReplan(idx, ag.targetRef, ag.targetPos)
 			}
 		}
 	}
 }
 
-func (c *Crowd) getNeighbours(pos *[3]float32, height, range_ float32,
+func (c *Crowd) getNeighbours(pos [3]float32, height, range_ float32,
 	skip *CrowdAgent, result []CrowdNeighbour, maxResult int,
 	agents []*CrowdAgent, nagents int, grid *ProximityGrid) int {
 
@@ -1080,13 +1073,12 @@ func (c *Crowd) getNeighbours(pos *[3]float32, height, range_ float32,
 		}
 
 		// Check for overlap.
-		var diff [3]float32
-		vecSub(&diff, pos, &ag.npos)
+		diff := vecSub(pos, ag.npos)
 		if float32(math.Abs(float64(diff[1]))) >= (height+ag.params.Height)/2.0 {
 			continue
 		}
 		diff[1] = 0
-		distSqr := vecLenSqr(&diff)
+		distSqr := vecLenSqr(diff)
 		if distSqr > range_*range_ {
 			continue
 		}
@@ -1101,17 +1093,16 @@ func (c *Crowd) getNeighbours(pos *[3]float32, height, range_ float32,
 func integrate(ag *CrowdAgent, dt float32) {
 	// Fake dynamic constraint.
 	maxDelta := ag.params.MaxAcceleration * dt
-	var dv [3]float32
-	vecSub(&dv, &ag.nvel, &ag.vel)
-	ds := vecLen(&dv)
+	dv := vecSub(ag.nvel, ag.vel)
+	ds := vecLen(dv)
 	if ds > maxDelta {
-		vecScale(&dv, maxDelta/ds)
+		dv = vecScale(dv, maxDelta/ds)
 	}
-	vecAdd(&ag.vel, &ag.vel, &dv)
+	ag.vel = vecAdd(ag.vel, dv)
 
 	// Integrate
-	if vecLen(&ag.vel) > 0.0001 {
-		vecMad(&ag.npos, &ag.npos, &ag.vel, dt)
+	if vecLen(ag.vel) > 0.0001 {
+		ag.npos = vecMad(ag.npos, ag.vel, dt)
 	} else {
 		ag.vel = [3]float32{}
 	}
@@ -1124,7 +1115,7 @@ func overOffmeshConnection(ag *CrowdAgent, radius float32) bool {
 
 	offMeshConnection := (ag.cornerFlags[ag.ncorners-1] & StraightPathOffMeshConnection) != 0
 	if offMeshConnection {
-		distSq := vecDist2DSqr(&ag.npos, (*[3]float32)(unsafe.Pointer(&ag.cornerVerts[(ag.ncorners-1)*3])))
+		distSq := vecDist2DSqr(ag.npos, cornerVert(ag.cornerVerts[:], ag.ncorners-1))
 		if distSq < radius*radius {
 			return true
 		}
@@ -1141,51 +1132,49 @@ func getDistanceToGoal(ag *CrowdAgent, range_ float32) float32 {
 	endOfPath := (ag.cornerFlags[ag.ncorners-1] & StraightPathEnd) != 0
 	if endOfPath {
 		return float32(math.Min(
-			float64(vecDist2D(&ag.npos, (*[3]float32)(unsafe.Pointer(&ag.cornerVerts[(ag.ncorners-1)*3])))),
+			float64(vecDist2D(ag.npos, cornerVert(ag.cornerVerts[:], ag.ncorners-1))),
 			float64(range_)))
 	}
 
 	return range_
 }
 
-func calcSmoothSteerDirection(ag *CrowdAgent, dir *[3]float32) {
+func calcSmoothSteerDirection(ag *CrowdAgent) [3]float32 {
 	if ag.ncorners == 0 {
-		*dir = [3]float32{}
-		return
+		return [3]float32{}
 	}
 
 	ip0 := 0
 	ip1 := recastMin(1, ag.ncorners-1)
-	p0 := (*[3]float32)(unsafe.Pointer(&ag.cornerVerts[ip0*3]))
-	p1 := (*[3]float32)(unsafe.Pointer(&ag.cornerVerts[ip1*3]))
+	p0 := cornerVert(ag.cornerVerts[:], ip0)
+	p1 := cornerVert(ag.cornerVerts[:], ip1)
 
-	var dir0, dir1 [3]float32
-	vecSub(&dir0, p0, &ag.npos)
-	vecSub(&dir1, p1, &ag.npos)
+	dir0 := vecSub(p0, ag.npos)
+	dir1 := vecSub(p1, ag.npos)
 	dir0[1] = 0
 	dir1[1] = 0
 
-	len0 := vecLen(&dir0)
-	len1 := vecLen(&dir1)
+	len0 := vecLen(dir0)
+	len1 := vecLen(dir1)
 	if len1 > 0.001 {
-		vecScale(&dir1, 1.0/len1)
+		dir1 = vecScale(dir1, 1.0/len1)
 	}
 
+	var dir [3]float32
 	dir[0] = dir0[0] - dir1[0]*len0*0.5
 	dir[1] = 0
 	dir[2] = dir0[2] - dir1[2]*len0*0.5
 
-	vecNormalize(dir)
+	return vecNormalize(dir)
 }
 
-func calcStraightSteerDirection(ag *CrowdAgent, dir *[3]float32) {
+func calcStraightSteerDirection(ag *CrowdAgent) [3]float32 {
 	if ag.ncorners == 0 {
-		*dir = [3]float32{}
-		return
+		return [3]float32{}
 	}
-	vecSub(dir, (*[3]float32)(unsafe.Pointer(&ag.cornerVerts[0])), &ag.npos)
-	dir[1] = 0
-	vecNormalize(dir)
+	d := vecSub(cornerVert(ag.cornerVerts[:], 0), ag.npos)
+	d[1] = 0
+	return vecNormalize(d)
 }
 
 func addNeighbour(idx int, dist float32, neis []CrowdNeighbour, nneis, maxNeis int) int {
@@ -1221,10 +1210,4 @@ func addNeighbour(idx int, dist float32, neis []CrowdNeighbour, nneis, maxNeis i
 	neis[i] = CrowdNeighbour{Idx: idx, Dist: dist}
 
 	return recastMin(nneis+1, maxNeis)
-}
-
-func vecAdd(dest, a, b *[3]float32) {
-	dest[0] = a[0] + b[0]
-	dest[1] = a[1] + b[1]
-	dest[2] = a[2] + b[2]
 }

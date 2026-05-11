@@ -381,7 +381,7 @@ func Vcross(v1, v2 [3]float32) [3]float32 {
 }
 
 // Vdot derives the dot product of two vectors.
-func Vdot(v1, v2 *[3]float32) float32 {
+func Vdot(v1, v2 [3]float32) float32 {
 	return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
 }
 
@@ -430,13 +430,9 @@ func Vmax(mx, v [3]float32) [3]float32 {
 	}
 }
 
-// Vcopy performs a vector copy.
-func Vcopy(v [3]float32) [3]float32 {
-	return [3]float32{v[0], v[1], v[2]}
-}
 
 // Vdist returns the distance between two points.
-func Vdist(v1, v2 *[3]float32) float32 {
+func Vdist(v1, v2 [3]float32) float32 {
 	dx := v2[0] - v1[0]
 	dy := v2[1] - v1[1]
 	dz := v2[2] - v1[2]
@@ -444,7 +440,7 @@ func Vdist(v1, v2 *[3]float32) float32 {
 }
 
 // VdistSqr returns the square of the distance between two points.
-func VdistSqr(v1, v2 *[3]float32) float32 {
+func VdistSqr(v1, v2 [3]float32) float32 {
 	dx := v2[0] - v1[0]
 	dy := v2[1] - v1[1]
 	dz := v2[2] - v1[2]
@@ -507,14 +503,14 @@ func CalcTriNormal(v0, v1, v2 [3]float32) [3]float32 {
 }
 
 // OverlapBounds checks whether two bounding boxes overlap.
-func OverlapBounds(aMin, aMax, bMin, bMax *[3]float32) bool {
+func OverlapBounds(aMin, aMax, bMin, bMax [3]float32) bool {
 	return aMin[0] <= bMax[0] && aMax[0] >= bMin[0] &&
 		aMin[1] <= bMax[1] && aMax[1] >= bMin[1] &&
 		aMin[2] <= bMax[2] && aMax[2] >= bMin[2]
 }
 
 // PointInPoly checks if a point is contained within a polygon.
-func PointInPoly(numVerts int, verts []float32, point *[3]float32) bool {
+func PointInPoly(numVerts int, verts []float32, point [3]float32) bool {
 	inPoly := false
 	for i, j := 0, numVerts-1; i < numVerts; j, i = i, i+1 {
 		vi := verts[i*3 : i*3+3]

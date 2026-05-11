@@ -3,104 +3,116 @@ package detour
 import "math"
 
 // Vcross computes the cross product of two vectors (v1 x v2).
-func Vcross(dest, v1, v2 []float32) {
-	dest[0] = v1[1]*v2[2] - v1[2]*v2[1]
-	dest[1] = v1[2]*v2[0] - v1[0]*v2[2]
-	dest[2] = v1[0]*v2[1] - v1[1]*v2[0]
+func Vcross(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[1]*v2[2] - v1[2]*v2[1],
+		v1[2]*v2[0] - v1[0]*v2[2],
+		v1[0]*v2[1] - v1[1]*v2[0],
+	}
 }
 
 // Vdot computes the dot product of two vectors.
-func Vdot(v1, v2 []float32) float32 {
+func Vdot(v1, v2 [3]float32) float32 {
 	return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
 }
 
 // Vmad performs a scaled vector addition (v1 + v2 * s).
-func Vmad(dest, v1, v2 []float32, s float32) {
-	dest[0] = v1[0] + v2[0]*s
-	dest[1] = v1[1] + v2[1]*s
-	dest[2] = v1[2] + v2[2]*s
+func Vmad(v1, v2 [3]float32, s float32) [3]float32 {
+	return [3]float32{
+		v1[0] + v2[0]*s,
+		v1[1] + v2[1]*s,
+		v1[2] + v2[2]*s,
+	}
 }
 
 // Vlerp performs a linear interpolation between two vectors.
-func Vlerp(dest, v1, v2 []float32, t float32) {
-	dest[0] = v1[0] + (v2[0]-v1[0])*t
-	dest[1] = v1[1] + (v2[1]-v1[1])*t
-	dest[2] = v1[2] + (v2[2]-v1[2])*t
+func Vlerp(v1, v2 [3]float32, t float32) [3]float32 {
+	return [3]float32{
+		v1[0] + (v2[0]-v1[0])*t,
+		v1[1] + (v2[1]-v1[1])*t,
+		v1[2] + (v2[2]-v1[2])*t,
+	}
 }
 
 // Vadd performs vector addition.
-func Vadd(dest, v1, v2 []float32) {
-	dest[0] = v1[0] + v2[0]
-	dest[1] = v1[1] + v2[1]
-	dest[2] = v1[2] + v2[2]
+func Vadd(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[0] + v2[0],
+		v1[1] + v2[1],
+		v1[2] + v2[2],
+	}
 }
 
 // Vsub performs vector subtraction.
-func Vsub(dest, v1, v2 []float32) {
-	dest[0] = v1[0] - v2[0]
-	dest[1] = v1[1] - v2[1]
-	dest[2] = v1[2] - v2[2]
+func Vsub(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[0] - v2[0],
+		v1[1] - v2[1],
+		v1[2] - v2[2],
+	}
 }
 
 // Vscale scales the vector by the specified value.
-func Vscale(dest, v []float32, t float32) {
-	dest[0] = v[0] * t
-	dest[1] = v[1] * t
-	dest[2] = v[2] * t
-}
-
-// Vmin selects the minimum value of each element from the specified vectors.
-func Vmin(mn, v []float32) {
-	if v[0] < mn[0] {
-		mn[0] = v[0]
-	}
-	if v[1] < mn[1] {
-		mn[1] = v[1]
-	}
-	if v[2] < mn[2] {
-		mn[2] = v[2]
+func Vscale(v [3]float32, t float32) [3]float32 {
+	return [3]float32{
+		v[0] * t,
+		v[1] * t,
+		v[2] * t,
 	}
 }
 
-// Vmax selects the maximum value of each element from the specified vectors.
-func Vmax(mx, v []float32) {
-	if v[0] > mx[0] {
-		mx[0] = v[0]
+// Vmin selects the minimum value of each element.
+func Vmin(a, b [3]float32) [3]float32 {
+	r := a
+	if b[0] < r[0] {
+		r[0] = b[0]
 	}
-	if v[1] > mx[1] {
-		mx[1] = v[1]
+	if b[1] < r[1] {
+		r[1] = b[1]
 	}
-	if v[2] > mx[2] {
-		mx[2] = v[2]
+	if b[2] < r[2] {
+		r[2] = b[2]
 	}
+	return r
 }
 
-// Vset sets the vector elements to the specified values.
-func Vset(dest []float32, x, y, z float32) {
-	dest[0] = x
-	dest[1] = y
-	dest[2] = z
+// Vmax selects the maximum value of each element.
+func Vmax(a, b [3]float32) [3]float32 {
+	r := a
+	if b[0] > r[0] {
+		r[0] = b[0]
+	}
+	if b[1] > r[1] {
+		r[1] = b[1]
+	}
+	if b[2] > r[2] {
+		r[2] = b[2]
+	}
+	return r
 }
 
-// Vcopy copies a vector.
-func Vcopy(dest, a []float32) {
-	dest[0] = a[0]
-	dest[1] = a[1]
-	dest[2] = a[2]
+// Vset creates a vector from x, y, z.
+func Vset(x, y, z float32) [3]float32 {
+	return [3]float32{x, y, z}
+}
+
+// Vcopy copies 3 floats from a slice to a [3]float32. Used to read from flat vertex buffers.
+func Vcopy(src []float32) [3]float32 {
+	return [3]float32{src[0], src[1], src[2]}
 }
 
 // Vlen computes the scalar length of a vector.
-func Vlen(v []float32) float32 {
+func Vlen(v [3]float32) float32 {
 	return float32(math.Sqrt(float64(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])))
 }
 
 // VlenSqr computes the squared length of a vector.
-func VlenSqr(v []float32) float32 {
+func VlenSqr(v [3]float32) float32 {
 	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2]
 }
 
 // Vdist computes the distance between two points.
-func Vdist(v1, v2 []float32) float32 {
+func Vdist(v1, v2 [3]float32) float32 {
 	dx := v2[0] - v1[0]
 	dy := v2[1] - v1[1]
 	dz := v2[2] - v1[2]
@@ -108,7 +120,7 @@ func Vdist(v1, v2 []float32) float32 {
 }
 
 // VdistSqr computes the squared distance between two points.
-func VdistSqr(v1, v2 []float32) float32 {
+func VdistSqr(v1, v2 [3]float32) float32 {
 	dx := v2[0] - v1[0]
 	dy := v2[1] - v1[1]
 	dz := v2[2] - v1[2]
@@ -116,59 +128,57 @@ func VdistSqr(v1, v2 []float32) float32 {
 }
 
 // Vdist2D computes the 2D distance on the xz-plane.
-func Vdist2D(v1, v2 []float32) float32 {
+func Vdist2D(v1, v2 [3]float32) float32 {
 	dx := v2[0] - v1[0]
 	dz := v2[2] - v1[2]
 	return float32(math.Sqrt(float64(dx*dx + dz*dz)))
 }
 
 // Vdist2DSqr computes the squared 2D distance on the xz-plane.
-func Vdist2DSqr(v1, v2 []float32) float32 {
+func Vdist2DSqr(v1, v2 [3]float32) float32 {
 	dx := v2[0] - v1[0]
 	dz := v2[2] - v1[2]
 	return dx*dx + dz*dz
 }
 
 // Vnormalize normalizes a vector.
-func Vnormalize(v []float32) {
+func Vnormalize(v [3]float32) [3]float32 {
 	d := 1.0 / float32(math.Sqrt(float64(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])))
-	v[0] *= d
-	v[1] *= d
-	v[2] *= d
+	return [3]float32{v[0] * d, v[1] * d, v[2] * d}
 }
 
 // Vequal performs a 'sloppy' colocation check.
-func Vequal(p0, p1 []float32) bool {
+func Vequal(p0, p1 [3]float32) bool {
 	const thr = 1.0 / (16384.0 * 16384.0)
 	d := VdistSqr(p0, p1)
 	return d < thr
 }
 
 // Visfinite checks that the vector's components are all finite.
-func Visfinite(v []float32) bool {
+func Visfinite(v [3]float32) bool {
 	return !math.IsInf(float64(v[0]), 0) && !math.IsNaN(float64(v[0])) &&
 		!math.IsInf(float64(v[1]), 0) && !math.IsNaN(float64(v[1])) &&
 		!math.IsInf(float64(v[2]), 0) && !math.IsNaN(float64(v[2]))
 }
 
 // Visfinite2D checks that the vector's 2D components are finite.
-func Visfinite2D(v []float32) bool {
+func Visfinite2D(v [3]float32) bool {
 	return !math.IsInf(float64(v[0]), 0) && !math.IsNaN(float64(v[0])) &&
 		!math.IsInf(float64(v[2]), 0) && !math.IsNaN(float64(v[2]))
 }
 
 // Vdot2D computes dot product on the xz-plane.
-func Vdot2D(u, v []float32) float32 {
+func Vdot2D(u, v [3]float32) float32 {
 	return u[0]*v[0] + u[2]*v[2]
 }
 
 // Vperp2D computes the xz-plane 2D perp product (uz*vx - ux*vz).
-func Vperp2D(u, v []float32) float32 {
+func Vperp2D(u, v [3]float32) float32 {
 	return u[2]*v[0] - u[0]*v[2]
 }
 
 // TriArea2D computes signed xz-plane area of triangle ABC.
-func TriArea2D(a, b, c []float32) float32 {
+func TriArea2D(a, b, c [3]float32) float32 {
 	abx := b[0] - a[0]
 	abz := b[2] - a[2]
 	acx := c[0] - a[0]
@@ -177,7 +187,7 @@ func TriArea2D(a, b, c []float32) float32 {
 }
 
 // OverlapQuantBounds determines if two AABBs (quantized) overlap.
-func OverlapQuantBounds(amin, amax, bmin, bmax []uint16) bool {
+func OverlapQuantBounds(amin, amax, bmin, bmax [3]uint16) bool {
 	if amin[0] > bmax[0] || amax[0] < bmin[0] {
 		return false
 	}
@@ -191,7 +201,7 @@ func OverlapQuantBounds(amin, amax, bmin, bmax []uint16) bool {
 }
 
 // OverlapBounds determines if two AABBs overlap.
-func OverlapBounds(amin, amax, bmin, bmax []float32) bool {
+func OverlapBounds(amin, amax, bmin, bmax [3]float32) bool {
 	if amin[0] > bmax[0] || amax[0] < bmin[0] {
 		return false
 	}
@@ -205,82 +215,56 @@ func OverlapBounds(amin, amax, bmin, bmax []float32) bool {
 }
 
 // ClosestPtPointTriangle derives the closest point on a triangle from the reference point.
-func ClosestPtPointTriangle(closest, p, a, b, c []float32) {
-	// Check if P in vertex region outside A
-	ab := make([]float32, 3)
-	ac := make([]float32, 3)
-	ap := make([]float32, 3)
-	Vsub(ab, b, a)
-	Vsub(ac, c, a)
-	Vsub(ap, p, a)
+func ClosestPtPointTriangle(p, a, b, c [3]float32) [3]float32 {
+	ab := Vsub(b, a)
+	ac := Vsub(c, a)
+	ap := Vsub(p, a)
 	d1 := Vdot(ab, ap)
 	d2 := Vdot(ac, ap)
 	if d1 <= 0.0 && d2 <= 0.0 {
-		Vcopy(closest, a)
-		return
+		return a
 	}
 
-	// Check if P in vertex region outside B
-	bp := make([]float32, 3)
-	Vsub(bp, p, b)
+	bp := Vsub(p, b)
 	d3 := Vdot(ab, bp)
 	d4 := Vdot(ac, bp)
 	if d3 >= 0.0 && d4 <= d3 {
-		Vcopy(closest, b)
-		return
+		return b
 	}
 
-	// Check if P in edge region of AB
 	vc := d1*d4 - d3*d2
 	if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
 		v := d1 / (d1 - d3)
-		closest[0] = a[0] + v*ab[0]
-		closest[1] = a[1] + v*ab[1]
-		closest[2] = a[2] + v*ab[2]
-		return
+		return [3]float32{a[0] + v*ab[0], a[1] + v*ab[1], a[2] + v*ab[2]}
 	}
 
-	// Check if P in vertex region outside C
-	cp := make([]float32, 3)
-	Vsub(cp, p, c)
+	cp := Vsub(p, c)
 	d5 := Vdot(ab, cp)
 	d6 := Vdot(ac, cp)
 	if d6 >= 0.0 && d5 <= d6 {
-		Vcopy(closest, c)
-		return
+		return c
 	}
 
-	// Check if P in edge region of AC
 	vb := d5*d2 - d1*d6
 	if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
 		w := d2 / (d2 - d6)
-		closest[0] = a[0] + w*ac[0]
-		closest[1] = a[1] + w*ac[1]
-		closest[2] = a[2] + w*ac[2]
-		return
+		return [3]float32{a[0] + w*ac[0], a[1] + w*ac[1], a[2] + w*ac[2]}
 	}
 
-	// Check if P in edge region of BC
 	va := d3*d6 - d5*d4
 	if va <= 0.0 && (d4-d3) >= 0.0 && (d5-d6) >= 0.0 {
 		w := (d4 - d3) / ((d4 - d3) + (d5 - d6))
-		closest[0] = b[0] + w*(c[0]-b[0])
-		closest[1] = b[1] + w*(c[1]-b[1])
-		closest[2] = b[2] + w*(c[2]-b[2])
-		return
+		return [3]float32{b[0] + w*(c[0]-b[0]), b[1] + w*(c[1]-b[1]), b[2] + w*(c[2]-b[2])}
 	}
 
-	// P inside face region
 	denom := 1.0 / (va + vb + vc)
 	v := vb * denom
 	w := vc * denom
-	closest[0] = a[0] + ab[0]*v + ac[0]*w
-	closest[1] = a[1] + ab[1]*v + ac[1]*w
-	closest[2] = a[2] + ab[2]*v + ac[2]*w
+	return [3]float32{a[0] + ab[0]*v + ac[0]*w, a[1] + ab[1]*v + ac[1]*w, a[2] + ab[2]*v + ac[2]*w}
 }
 
 // IntersectSegmentPoly2D checks segment-polygon intersection on the xz-plane.
-func IntersectSegmentPoly2D(p0, p1, verts []float32, nverts int) (bool, float32, float32, int, int) {
+func IntersectSegmentPoly2D(p0, p1 [3]float32, verts []float32, nverts int) (bool, float32, float32, int, int) {
 	const eps = 0.000001
 
 	tmin := float32(0)
@@ -288,14 +272,17 @@ func IntersectSegmentPoly2D(p0, p1, verts []float32, nverts int) (bool, float32,
 	segMin := -1
 	segMax := -1
 
-	dir := make([]float32, 3)
-	Vsub(dir, p1, p0)
+	dir := Vsub(p1, p0)
 
 	for i, j := 0, nverts-1; i < nverts; j, i = i, i+1 {
-		edge := make([]float32, 3)
-		diff := make([]float32, 3)
-		Vsub(edge, verts[i*3:(i*3)+3], verts[j*3:(j*3)+3])
-		Vsub(diff, p0, verts[j*3:(j*3)+3])
+		edge := Vsub(
+			[3]float32{verts[i*3], verts[i*3+1], verts[i*3+2]},
+			[3]float32{verts[j*3], verts[j*3+1], verts[j*3+2]},
+		)
+		diff := Vsub(
+			p0,
+			[3]float32{verts[j*3], verts[j*3+1], verts[j*3+2]},
+		)
 		n := Vperp2D(edge, diff)
 		d := Vperp2D(dir, edge)
 		if float32(math.Abs(float64(d))) < eps {
@@ -328,7 +315,7 @@ func IntersectSegmentPoly2D(p0, p1, verts []float32, nverts int) (bool, float32,
 }
 
 // DistancePtSegSqr2D computes the squared distance between a point and a segment in 2D.
-func DistancePtSegSqr2D(pt, p, q []float32) (float32, float32) {
+func DistancePtSegSqr2D(pt, p, q [3]float32) (float32, float32) {
 	pqx := q[0] - p[0]
 	pqz := q[2] - p[2]
 	dx := pt[0] - p[0]
@@ -349,10 +336,8 @@ func DistancePtSegSqr2D(pt, p, q []float32) (float32, float32) {
 }
 
 // CalcPolyCenter computes the centroid of a convex polygon.
-func CalcPolyCenter(tc []float32, idx []uint16, verts []float32) {
-	tc[0] = 0
-	tc[1] = 0
-	tc[2] = 0
+func CalcPolyCenter(idx []uint16, verts []float32) [3]float32 {
+	var tc [3]float32
 	nidx := len(idx)
 	for j := 0; j < nidx; j++ {
 		v := verts[idx[j]*3 : idx[j]*3+3]
@@ -364,18 +349,16 @@ func CalcPolyCenter(tc []float32, idx []uint16, verts []float32) {
 	tc[0] *= s
 	tc[1] *= s
 	tc[2] *= s
+	return tc
 }
 
 // ClosestHeightPointTriangle computes the height of the closest point on a triangle.
-func ClosestHeightPointTriangle(p, a, b, c []float32) (bool, float32) {
+func ClosestHeightPointTriangle(p, a, b, c [3]float32) (bool, float32) {
 	const eps = 1e-6
 
-	v0 := make([]float32, 3)
-	v1 := make([]float32, 3)
-	v2 := make([]float32, 3)
-	Vsub(v0, c, a)
-	Vsub(v1, b, a)
-	Vsub(v2, p, a)
+	v0 := Vsub(c, a)
+	v1 := Vsub(b, a)
+	v2 := Vsub(p, a)
 
 	denom := v0[0]*v1[2] - v0[2]*v1[0]
 	if float32(math.Abs(float64(denom))) < eps {
@@ -399,7 +382,7 @@ func ClosestHeightPointTriangle(p, a, b, c []float32) (bool, float32) {
 }
 
 // PointInPolygon determines if a point is inside a convex polygon on the xz-plane.
-func PointInPolygon(pt, verts []float32, nverts int) bool {
+func PointInPolygon(pt [3]float32, verts []float32, nverts int) bool {
 	c := false
 	for i, j := 0, nverts-1; i < nverts; j, i = i, i+1 {
 		vi := verts[i*3 : i*3+3]
@@ -413,7 +396,7 @@ func PointInPolygon(pt, verts []float32, nverts int) bool {
 }
 
 // DistancePtPolyEdgesSqr computes distance from point to polygon edges.
-func DistancePtPolyEdgesSqr(pt, verts []float32, nverts int, ed, et []float32) bool {
+func DistancePtPolyEdgesSqr(pt [3]float32, verts []float32, nverts int, ed, et []float32) bool {
 	c := false
 	for i, j := 0, nverts-1; i < nverts; j, i = i, i+1 {
 		vi := verts[i*3 : i*3+3]
@@ -422,16 +405,19 @@ func DistancePtPolyEdgesSqr(pt, verts []float32, nverts int, ed, et []float32) b
 			(pt[0] < (vj[0]-vi[0])*(pt[2]-vi[2])/(vj[2]-vi[2])+vi[0]) {
 			c = !c
 		}
-		ed[j], et[j] = DistancePtSegSqr2D(pt, vj, vi)
+		ed[j], et[j] = DistancePtSegSqr2D(pt,
+			[3]float32{vj[0], vj[1], vj[2]},
+			[3]float32{vi[0], vi[1], vi[2]},
+		)
 	}
 	return c
 }
 
-func projectPoly(axis, poly []float32, npoly int) (float32, float32) {
-	rmin := Vdot2D(axis, poly[0:3])
+func projectPoly(axis [3]float32, poly []float32, npoly int) (float32, float32) {
+	rmin := Vdot2D(axis, [3]float32{poly[0], poly[1], poly[2]})
 	rmax := rmin
 	for i := 1; i < npoly; i++ {
-		d := Vdot2D(axis, poly[i*3:i*3+3])
+		d := Vdot2D(axis, [3]float32{poly[i*3], poly[i*3+1], poly[i*3+2]})
 		if d < rmin {
 			rmin = d
 		}
@@ -454,9 +440,9 @@ func OverlapPolyPoly2D(polya []float32, npolya int, polyb []float32, npolyb int)
 	const eps = 1e-4
 
 	for i, j := 0, npolya-1; i < npolya; j, i = i, i+1 {
-		va := polya[j*3 : j*3+3]
-		vb := polya[i*3 : i*3+3]
-		n := []float32{vb[2] - va[2], 0, -(vb[0] - va[0])}
+		va := [3]float32{polya[j*3], polya[j*3+1], polya[j*3+2]}
+		vb := [3]float32{polya[i*3], polya[i*3+1], polya[i*3+2]}
+		n := [3]float32{vb[2] - va[2], 0, -(vb[0] - va[0])}
 		amin, amax := projectPoly(n, polya, npolya)
 		bmin, bmax := projectPoly(n, polyb, npolyb)
 		if !overlapRange(amin, amax, bmin, bmax, eps) {
@@ -464,9 +450,9 @@ func OverlapPolyPoly2D(polya []float32, npolya int, polyb []float32, npolyb int)
 		}
 	}
 	for i, j := 0, npolyb-1; i < npolyb; j, i = i, i+1 {
-		va := polyb[j*3 : j*3+3]
-		vb := polyb[i*3 : i*3+3]
-		n := []float32{vb[2] - va[2], 0, -(vb[0] - va[0])}
+		va := [3]float32{polyb[j*3], polyb[j*3+1], polyb[j*3+2]}
+		vb := [3]float32{polyb[i*3], polyb[i*3+1], polyb[i*3+2]}
+		n := [3]float32{vb[2] - va[2], 0, -(vb[0] - va[0])}
 		amin, amax := projectPoly(n, polya, npolya)
 		bmin, bmax := projectPoly(n, polyb, npolyb)
 		if !overlapRange(amin, amax, bmin, bmax, eps) {
@@ -477,17 +463,19 @@ func OverlapPolyPoly2D(polya []float32, npolya int, polyb []float32, npolyb int)
 }
 
 // RandomPointInConvexPoly returns a random point in a convex polygon.
-func RandomPointInConvexPoly(pts []float32, npts int, areas []float32, s, t float32, out []float32) {
-	// Calc triangle areas
+func RandomPointInConvexPoly(pts []float32, npts int, areas []float32, s, t float32) [3]float32 {
 	areasum := float32(0)
 	for i := 2; i < npts; i++ {
-		areas[i] = TriArea2D(pts[0:3], pts[(i-1)*3:(i-1)*3+3], pts[i*3:i*3+3])
+		areas[i] = TriArea2D(
+			[3]float32{pts[0], pts[1], pts[2]},
+			[3]float32{pts[(i-1)*3], pts[(i-1)*3+1], pts[(i-1)*3+2]},
+			[3]float32{pts[i*3], pts[i*3+1], pts[i*3+2]},
+		)
 		if areas[i] < 0.001 {
 			areas[i] = 0.001
 		}
 		areasum += areas[i]
 	}
-	// Find sub triangle weighted by area
 	thr := s * areasum
 	acc := float32(0)
 	u := float32(1)
@@ -507,27 +495,26 @@ func RandomPointInConvexPoly(pts []float32, npts int, areas []float32, s, t floa
 	a := 1 - v
 	b := (1 - u) * v
 	c := u * v
-	pa := pts[0:3]
-	pb := pts[(tri-1)*3 : (tri-1)*3+3]
-	pc := pts[tri*3 : tri*3+3]
+	pa := [3]float32{pts[0], pts[1], pts[2]}
+	pb := [3]float32{pts[(tri-1)*3], pts[(tri-1)*3+1], pts[(tri-1)*3+2]}
+	pc := [3]float32{pts[tri*3], pts[tri*3+1], pts[tri*3+2]}
 
-	out[0] = a*pa[0] + b*pb[0] + c*pc[0]
-	out[1] = a*pa[1] + b*pb[1] + c*pc[1]
-	out[2] = a*pa[2] + b*pb[2] + c*pc[2]
+	return [3]float32{
+		a*pa[0] + b*pb[0] + c*pc[0],
+		a*pa[1] + b*pb[1] + c*pc[1],
+		a*pa[2] + b*pb[2] + c*pc[2],
+	}
 }
 
-func vperpXZ(a, b []float32) float32 {
+func vperpXZ(a, b [3]float32) float32 {
 	return a[0]*b[2] - a[2]*b[0]
 }
 
 // IntersectSegSeg2D checks if two segments intersect in 2D.
-func IntersectSegSeg2D(ap, aq, bp, bq []float32) (bool, float32, float32) {
-	u := make([]float32, 3)
-	v := make([]float32, 3)
-	w := make([]float32, 3)
-	Vsub(u, aq, ap)
-	Vsub(v, bq, bp)
-	Vsub(w, ap, bp)
+func IntersectSegSeg2D(ap, aq, bp, bq [3]float32) (bool, float32, float32) {
+	u := Vsub(aq, ap)
+	v := Vsub(bq, bp)
+	w := Vsub(ap, bp)
 	d := vperpXZ(u, v)
 	if float32(math.Abs(float64(d))) < 1e-6 {
 		return false, 0, 0
@@ -641,20 +628,4 @@ func clampInt16(v int) uint16 {
 		return 0xffff
 	}
 	return uint16(v)
-}
-
-// IntersectSegmentSeg2D checks if two line segments intersect on the xz-plane.
-// Returns (intersects, s, t) where s is the parameter along segment A (ap->aq)
-// and t is the parameter along segment B (bp->bq).
-func IntersectSegmentSeg2D(ap, aq, bp, bq []float32) (bool, float32, float32) {
-	u := []float32{aq[0] - ap[0], aq[1] - ap[1], aq[2] - ap[2]}
-	v := []float32{bq[0] - bp[0], bq[1] - bp[1], bq[2] - bp[2]}
-	w := []float32{ap[0] - bp[0], ap[1] - bp[1], ap[2] - bp[2]}
-	d := Vperp2D(u, v)
-	if float32(math.Abs(float64(d))) < 1e-6 {
-		return false, 0, 0
-	}
-	s := Vperp2D(v, w) / d
-	t := Vperp2D(u, w) / d
-	return true, s, t
 }

@@ -2,7 +2,6 @@ package detour_crowd
 
 import (
 	"math"
-	"unsafe"
 )
 
 // PathCorridor represents a dynamic polygon corridor used to plan agent movement.
@@ -29,9 +28,9 @@ func (c *PathCorridor) Init(maxPath int) bool {
 }
 
 // Reset resets the path corridor to the specified position.
-func (c *PathCorridor) Reset(ref PolyRef, pos *[3]float32) {
-	c.pos = *pos
-	c.target = *pos
+func (c *PathCorridor) Reset(ref PolyRef, pos [3]float32) {
+	c.pos = pos
+	c.target = pos
 	c.path[0] = ref
 	c.npath = 1
 }
@@ -43,14 +42,16 @@ func (c *PathCorridor) FindCorners(cornerVerts []float32, cornerFlags []uint8,
 
 	const minTargetDist = 0.01
 
-	ncorners := 0
-	navquery.FindStraightPath(c.pos, c.target, c.path[:c.npath], c.npath,
-		cornerVerts, cornerFlags, cornerPolys, &ncorners, maxCorners)
+	verts, flags, refs, ncorners, _ := navquery.FindStraightPath(c.pos, c.target, c.path[:c.npath], c.npath, maxCorners, 0)
+	copy(cornerVerts, verts)
+	copy(cornerFlags, flags)
+	copy(cornerPolys, refs)
 
 	// Prune points in the beginning of the path which are too close.
 	for ncorners > 0 {
+		cv := cornerVertsToVec(cornerVerts, 0)
 		if (cornerFlags[0]&StraightPathOffMeshConnection != 0) ||
-			vecDist2DSqr((*[3]float32)(unsafe.Pointer(&cornerVerts[0])), &c.pos) > minTargetDist*minTargetDist {
+			vecDist2DSqr(cv, c.pos) > minTargetDist*minTargetDist {
 			break
 		}
 		ncorners--
@@ -73,13 +74,10 @@ func (c *PathCorridor) FindCorners(cornerVerts []float32, cornerFlags []uint8,
 }
 
 // OptimizePathVisibility attempts to optimize the path if the specified point is visible.
-func (c *PathCorridor) OptimizePathVisibility(next *[3]float32, pathOptimizationRange float32,
-	navquery NavMeshQueryInterface, filter *QueryFilter) {
+func (c *PathCorridor) OptimizePathVisibility(next [3]float32, pathOptimizationRange float32, navquery NavMeshQueryInterface, filter *QueryFilter) {
 
-	// Clamp the ray to max distance.
-	var goal [3]float32
-	goal = *next
-	dist := vecDist2D(&c.pos, &goal)
+	goal := next
+	dist := vecDist2D(c.pos, goal)
 
 	// If too close to the goal, do not try to optimize.
 	if dist < 0.01 {
@@ -89,18 +87,17 @@ func (c *PathCorridor) OptimizePathVisibility(next *[3]float32, pathOptimization
 	// Overshoot a little.
 	dist = float32(math.Min(float64(dist+0.01), float64(pathOptimizationRange)))
 
-	// Adjust ray length.
-	var delta [3]float32
-	vecSub(&delta, &goal, &c.pos)
-	vecMad(&goal, &c.pos, &delta, pathOptimizationRange/dist)
+	delta := vecSub(goal, c.pos)
+	goal = vecMad(c.pos, delta, pathOptimizationRange/dist)
 
 	const maxRes = 32
 	res := make([]PolyRef, maxRes)
-	var t float32
-	var norm [3]float32
-	nres := 0
-	navquery.Raycast(c.path[0], c.pos, goal, filter, &t, &norm, res, &nres, maxRes)
-	if nres > 1 && t > 0.99 {
+	hit := &RaycastHit{}
+	// Use default options (0) and no previous ref for visibility optimization.
+	navquery.Raycast(c.path[0], c.pos, goal, filter, 0, 0, hit)
+	nres := hit.PathCount
+	if nres > 1 && hit.T > 0.99 {
+		copy(res[:nres], hit.Path[:nres])
 		c.npath = mergeCorridorStartShortcut(c.path, c.npath, c.maxPath, res, nres)
 	}
 }
@@ -116,9 +113,9 @@ func (c *PathCorridor) OptimizePathTopology(navquery NavMeshQueryInterface, filt
 
 	res := make([]PolyRef, maxRes)
 	nres := 0
-	navquery.InitSlicedFindPath(c.path[0], c.path[c.npath-1], c.pos, c.target, filter)
-	navquery.UpdateSlicedFindPath(maxIter, nil)
-	err := navquery.FinalizeSlicedFindPathPartial(c.path[:c.npath], c.npath, res, &nres, maxRes)
+	navquery.FindPathSliced(c.path[0], c.path[c.npath-1], c.pos, c.target, filter, 0)
+	navquery.UpdateSlicedPath(maxIter)
+	nres, err := navquery.GetPathFromSlicedPath(res, maxRes)
 
 	if err == nil && nres > 0 {
 		c.npath = mergeCorridorStartShortcut(c.path, c.npath, c.maxPath, res, nres)
@@ -130,7 +127,7 @@ func (c *PathCorridor) OptimizePathTopology(navquery NavMeshQueryInterface, filt
 
 // MoveOverOffmeshConnection advances the path over an off-mesh connection.
 func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2]PolyRef,
-	startPos, endPos *[3]float32, navquery NavMeshQueryInterface) bool {
+	startPos, endPos [3]float32, navquery NavMeshQueryInterface) bool {
 
 	// Advance the path up to and over the off-mesh connection.
 	var prevRef PolyRef
@@ -159,14 +156,12 @@ func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2
 		return false
 	}
 
-	// Use the navmesh to get off-mesh connection endpoints
-	// For now, we directly call a method on navmesh through the interface
 	return false
 }
 
 // FixPathStart fixes the start of the path corridor.
-func (c *PathCorridor) FixPathStart(safeRef PolyRef, safePos *[3]float32) bool {
-	c.pos = *safePos
+func (c *PathCorridor) FixPathStart(safeRef PolyRef, safePos [3]float32) bool {
+	c.pos = safePos
 	if c.npath < 3 && c.npath > 0 {
 		c.path[2] = c.path[c.npath-1]
 		c.path[0] = safeRef
@@ -180,8 +175,7 @@ func (c *PathCorridor) FixPathStart(safeRef PolyRef, safePos *[3]float32) bool {
 }
 
 // TrimInvalidPath trims invalid segments from the path.
-func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos *[3]float32,
-	navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos [3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
 
 	// Keep valid path as far as possible.
 	n := 0
@@ -192,17 +186,18 @@ func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos *[3]float32,
 	if n == c.npath {
 		return true
 	} else if n == 0 {
-		c.pos = *safePos
+		c.pos = safePos
 		c.path[0] = safeRef
 		c.npath = 1
 	} else {
 		c.npath = n
 	}
 
-	// Clamp target pos to last poly
-	var tgt [3]float32
-	tgt = c.target
-	navquery.ClosestPointOnPolyBoundary(c.path[c.npath-1], tgt, &c.target)
+	tgt := c.target
+	result, err := navquery.ClosestPointOnPolyBoundary(c.path[c.npath-1], tgt)
+	if err == nil {
+		c.target = result
+	}
 
 	return true
 }
@@ -219,59 +214,56 @@ func (c *PathCorridor) IsValid(maxLookAhead int, navquery NavMeshQueryInterface,
 }
 
 // MovePosition moves the position from the current location to the desired location.
-func (c *PathCorridor) MovePosition(npos *[3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
-	// Move along navmesh and update new position.
-	var result [3]float32
+func (c *PathCorridor) MovePosition(npos [3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
 	const maxVisited = 16
+	result := make([]float32, maxVisited*3)
 	visited := make([]PolyRef, maxVisited)
-	nvisited := 0
-	err := navquery.MoveAlongSurface(c.path[0], c.pos, *npos, filter,
-		&result, visited, &nvisited, maxVisited)
+	nvisited, err := navquery.MoveAlongSurface(c.path[0], c.pos, npos, filter, result, visited, maxVisited)
 	if err == nil {
 		c.npath = mergeCorridorStartMoved(c.path, c.npath, c.maxPath, visited, nvisited)
 
 		// Adjust the position to stay on top of the navmesh.
-		h := c.pos[1]
-		navquery.GetPolyHeight(c.path[0], result, &h)
-		result[1] = h
-		c.pos = result
+		var resPos [3]float32
+		copy(resPos[:], result[(nvisited-1)*3:(nvisited-1)*3+3])
+		h, _ := navquery.GetPolyHeight(c.path[0], resPos)
+		resPos[1] = h
+		c.pos = resPos
 		return true
 	}
 	return false
 }
 
 // MoveTargetPosition moves the target from the current location to the desired location.
-func (c *PathCorridor) MoveTargetPosition(npos *[3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
-	// Move along navmesh and update new position.
-	var result [3]float32
+func (c *PathCorridor) MoveTargetPosition(npos [3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
 	const maxVisited = 16
+	result := make([]float32, maxVisited*3)
 	visited := make([]PolyRef, maxVisited)
-	nvisited := 0
-	err := navquery.MoveAlongSurface(c.path[c.npath-1], c.target, *npos, filter,
-		&result, visited, &nvisited, maxVisited)
+	nvisited, err := navquery.MoveAlongSurface(c.path[c.npath-1], c.target, npos, filter, result, visited, maxVisited)
 	if err == nil {
 		c.npath = mergeCorridorEndMoved(c.path, c.npath, c.maxPath, visited, nvisited)
-		c.target = result
+		var resPos [3]float32
+		copy(resPos[:], result[(nvisited-1)*3:(nvisited-1)*3+3])
+		c.target = resPos
 		return true
 	}
 	return false
 }
 
 // SetCorridor loads a new path and target into the corridor.
-func (c *PathCorridor) SetCorridor(target *[3]float32, path []PolyRef, npath int) {
-	c.target = *target
+func (c *PathCorridor) SetCorridor(target [3]float32, path []PolyRef, npath int) {
+	c.target = target
 	copy(c.path[:npath], path[:npath])
 	c.npath = npath
 }
 
 // GetPos returns the current position within the corridor.
-func (c *PathCorridor) GetPos() *[3]float32 {
-	return &c.pos
+func (c *PathCorridor) GetPos() [3]float32 {
+	return c.pos
 }
 
 // GetTarget returns the current target within the corridor.
-func (c *PathCorridor) GetTarget() *[3]float32 {
-	return &c.target
+func (c *PathCorridor) GetTarget() [3]float32 {
+	return c.target
 }
 
 // GetFirstPoly returns the first polygon reference in the corridor.
@@ -436,68 +428,57 @@ const (
 
 // Helper vector functions
 
-func vecDist2DSqr(a, b *[3]float32) float32 {
+func vecDist2DSqr(a, b [3]float32) float32 {
 	dx := a[0] - b[0]
 	dz := a[2] - b[2]
 	return dx*dx + dz*dz
 }
 
-func vecDist2D(a, b *[3]float32) float32 {
+func vecDist2D(a, b [3]float32) float32 {
 	return float32(math.Sqrt(float64(vecDist2DSqr(a, b))))
 }
 
-func vecSub(dest, v1, v2 *[3]float32) {
-	dest[0] = v1[0] - v2[0]
-	dest[1] = v1[1] - v2[1]
-	dest[2] = v1[2] - v2[2]
+func vecSub(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]}
 }
 
-func vecMad(dest, v1, v2 *[3]float32, s float32) {
-	dest[0] = v1[0] + v2[0]*s
-	dest[1] = v1[1] + v2[1]*s
-	dest[2] = v1[2] + v2[2]*s
+func vecMad(v1, v2 [3]float32, s float32) [3]float32 {
+	return [3]float32{v1[0] + v2[0]*s, v1[1] + v2[1]*s, v1[2] + v2[2]*s}
 }
 
-func vecCopy(dest, src *[3]float32) {
-	*dest = *src
+func vecSet(x, y, z float32) [3]float32 {
+	return [3]float32{x, y, z}
 }
 
-func vecSet(dest *[3]float32, x, y, z float32) {
-	dest[0] = x
-	dest[1] = y
-	dest[2] = z
+func vecScale(v [3]float32, s float32) [3]float32 {
+	return [3]float32{v[0] * s, v[1] * s, v[2] * s}
 }
 
-func vecScale(dest *[3]float32, s float32) {
-	dest[0] *= s
-	dest[1] *= s
-	dest[2] *= s
-}
-
-func vecLenSqr(v *[3]float32) float32 {
+func vecLenSqr(v [3]float32) float32 {
 	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2]
 }
 
-func vecLen(v *[3]float32) float32 {
+func vecLen(v [3]float32) float32 {
 	return float32(math.Sqrt(float64(vecLenSqr(v))))
 }
 
-func vecNormalize(dest *[3]float32) {
-	d := vecLen(dest)
+func vecNormalize(v [3]float32) [3]float32 {
+	d := vecLen(v)
 	if d > 0.0001 {
-		vecScale(dest, 1.0/d)
+		return vecScale(v, 1.0/d)
 	}
+	return v
 }
 
-func vecDot2D(a, b *[3]float32) float32 {
+func vecDot2D(a, b [3]float32) float32 {
 	return a[0]*b[0] + a[2]*b[2]
 }
 
-func vecPerp2D(a, b *[3]float32) float32 {
+func vecPerp2D(a, b [3]float32) float32 {
 	return a[0]*b[2] - a[2]*b[0]
 }
 
-func triArea2D(a, b, c *[3]float32) float32 {
+func triArea2D(a, b, c [3]float32) float32 {
 	ax := b[0] - a[0]
 	az := b[2] - a[2]
 	bx := c[0] - a[0]
@@ -505,10 +486,28 @@ func triArea2D(a, b, c *[3]float32) float32 {
 	return ax*bz - az*bx
 }
 
-func vecLerp(dest, a, b *[3]float32, t float32) {
-	dest[0] = a[0] + (b[0]-a[0])*t
-	dest[1] = a[1] + (b[1]-a[1])*t
-	dest[2] = a[2] + (b[2]-a[2])*t
+func vecLerp(a, b [3]float32, t float32) [3]float32 {
+	return [3]float32{
+		a[0] + (b[0]-a[0])*t,
+		a[1] + (b[1]-a[1])*t,
+		a[2] + (b[2]-a[2])*t,
+	}
+}
+
+func vecAdd(a, b [3]float32) [3]float32 {
+	return [3]float32{a[0] + b[0], a[1] + b[1], a[2] + b[2]}
+}
+
+// cornerVert extracts a [3]float32 vertex from the cornerVerts flat array.
+func cornerVert(cornerVerts []float32, idx int) [3]float32 {
+	i := idx * 3
+	return [3]float32{cornerVerts[i], cornerVerts[i+1], cornerVerts[i+2]}
+}
+
+// cornerVertsToVec extracts a [3]float32 from a flat float32 array at a given index offset (in elements, not vectors).
+func cornerVertsToVec(verts []float32, idx int) [3]float32 {
+	i := idx * 3
+	return [3]float32{verts[i], verts[i+1], verts[i+2]}
 }
 
 func recastMin(a, b int) int {

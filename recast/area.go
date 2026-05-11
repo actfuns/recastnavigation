@@ -263,7 +263,7 @@ func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) (bool, erro
 }
 
 // MarkBoxArea applies an area id to all spans within the specified bounding box (AABB).
-func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds *[3]float32, areaID uint8, chf *CompactHeightfield) error {
+func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds [3]float32, areaID uint8, chf *CompactHeightfield) error {
 	if ctx == nil {
 		return fmt.Errorf("recast: ctx must not be nil")
 	}
@@ -341,8 +341,8 @@ func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY 
 
 	// Compute the bounding box of the polygon
 	var bmin, bmax [3]float32
-	bmin = Vcopy([3]float32{verts[0], verts[1], verts[2]})
-	bmax = Vcopy([3]float32{verts[0], verts[1], verts[2]})
+	bmin = [3]float32{verts[0], verts[1], verts[2]}
+	bmax = [3]float32{verts[0], verts[1], verts[2]}
 	for i := 1; i < numVerts; i++ {
 		v := [3]float32{verts[i*3], verts[i*3+1], verts[i*3+2]}
 		bmin = Vmin(bmin, v)
@@ -401,7 +401,7 @@ func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY 
 					chf.Bmin[2] + (float32(z)+0.5)*chf.Cs,
 				}
 
-				if PointInPoly(numVerts, verts, &point) {
+				if PointInPoly(numVerts, verts, point) {
 					chf.Areas[spanIndex] = areaID
 				}
 			}
@@ -419,17 +419,17 @@ func OffsetPoly(verts []float32, numVerts int, offset float32, outVerts []float3
 		vertIndexA := (vertIndex + numVerts - 1) % numVerts
 		vertIndexB := vertIndex
 		vertIndexC := (vertIndex + 1) % numVerts
-		vertA := &[3]float32{verts[vertIndexA*3], verts[vertIndexA*3+1], verts[vertIndexA*3+2]}
-		vertB := &[3]float32{verts[vertIndexB*3], verts[vertIndexB*3+1], verts[vertIndexB*3+2]}
-		vertC := &[3]float32{verts[vertIndexC*3], verts[vertIndexC*3+1], verts[vertIndexC*3+2]}
+		vertA := [3]float32{verts[vertIndexA*3], verts[vertIndexA*3+1], verts[vertIndexA*3+2]}
+		vertB := [3]float32{verts[vertIndexB*3], verts[vertIndexB*3+1], verts[vertIndexB*3+2]}
+		vertC := [3]float32{verts[vertIndexC*3], verts[vertIndexC*3+1], verts[vertIndexC*3+2]}
 
 		// From A to B on the x/z plane
-		prevSegmentDir := Vsub(*vertB, *vertA)
+		prevSegmentDir := Vsub(vertB, vertA)
 		prevSegmentDir[1] = 0 // Squash onto x/z plane
 		prevSegmentDir = VsafeNormalize(prevSegmentDir)
 
 		// From B to C on the x/z plane
-		currSegmentDir := Vsub(*vertC, *vertB)
+		currSegmentDir := Vsub(vertC, vertB)
 		currSegmentDir[1] = 0 // Squash onto x/z plane
 		currSegmentDir = VsafeNormalize(currSegmentDir)
 
@@ -494,7 +494,7 @@ func OffsetPoly(verts []float32, numVerts int, offset float32, outVerts []float3
 }
 
 // MarkCylinderArea applies the area id to all spans within the specified y-axis-aligned cylinder.
-func MarkCylinderArea(ctx *Context, position *[3]float32, radius, height float32, areaID uint8, chf *CompactHeightfield) error {
+func MarkCylinderArea(ctx *Context, position [3]float32, radius, height float32, areaID uint8, chf *CompactHeightfield) error {
 	if ctx == nil {
 		return fmt.Errorf("recast: ctx must not be nil")
 	}

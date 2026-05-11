@@ -165,8 +165,8 @@ func createBVTree(params *NavMeshCreateParams, nodes []BVNode) {
 			bmin[0], bmin[1], bmin[2] = dv[0], dv[1], dv[2]
 			bmax[0], bmax[1], bmax[2] = dv[0], dv[1], dv[2]
 			for j := 1; j < ndv; j++ {
-				Vmin(bmin[:], dv[j*3:j*3+3])
-				Vmax(bmax[:], dv[j*3:j*3+3])
+				bmin = Vmin(bmin, [3]float32{dv[j*3], dv[j*3+1], dv[j*3+2]})
+				bmax = Vmax(bmax, [3]float32{dv[j*3], dv[j*3+1], dv[j*3+2]})
 			}
 			it.bmin[0] = clampInt16(int((bmin[0] - params.Bmin[0]) * quantFactor))
 			it.bmin[1] = clampInt16(int((bmin[1] - params.Bmin[1]) * quantFactor))
@@ -217,7 +217,7 @@ func createBVTree(params *NavMeshCreateParams, nodes []BVNode) {
 	subdivide(items, params.PolyCount, 0, params.PolyCount, &curNode, nodes)
 }
 
-func classifyOffMeshPoint(pt []float32, bmin, bmax []float32) uint8 {
+func classifyOffMeshPoint(pt, bmin, bmax [3]float32) uint8 {
 	const (
 		xp uint8 = 1 << 0
 		zp uint8 = 1 << 1
@@ -311,16 +311,16 @@ func CreateNavMeshData(params *NavMeshCreateParams) ([]byte, int, bool) {
 		hmin -= params.WalkableClimb
 		hmax += params.WalkableClimb
 		var bmin, bmax [3]float32
-		Vcopy(bmin[:], params.Bmin[:])
-		Vcopy(bmax[:], params.Bmax[:])
+		copy(bmin[:], params.Bmin[:])
+		copy(bmax[:], params.Bmax[:])
 		bmin[1] = hmin
 		bmax[1] = hmax
 
 		for i := 0; i < params.OffMeshConCount; i++ {
 			p0 := params.OffMeshConVerts[(i*2+0)*3:]
 			p1 := params.OffMeshConVerts[(i*2+1)*3:]
-			offMeshConClass[i*2+0] = classifyOffMeshPoint(p0, bmin[:], bmax[:])
-			offMeshConClass[i*2+1] = classifyOffMeshPoint(p1, bmin[:], bmax[:])
+			offMeshConClass[i*2+0] = classifyOffMeshPoint([3]float32{p0[0], p0[1], p0[2]}, bmin, bmax)
+			offMeshConClass[i*2+1] = classifyOffMeshPoint([3]float32{p1[0], p1[1], p1[2]}, bmin, bmax)
 
 			if offMeshConClass[i*2+0] == 0xff {
 				if p0[1] < bmin[1] || p0[1] > bmax[1] {
@@ -459,8 +459,8 @@ func CreateNavMeshData(params *NavMeshCreateParams) ([]byte, int, bool) {
 		if offMeshConClass[i*2+0] == 0xff {
 			linkv := params.OffMeshConVerts[i*2*3:]
 			v := navVerts[(params.VertCount+n*2)*3:]
-			Vcopy(v[0:3], linkv[0:3])
-			Vcopy(v[3:6], linkv[3:6])
+			copy(v[0:3], linkv[0:3])
+			copy(v[3:6], linkv[3:6])
 			n++
 		}
 	}
@@ -626,8 +626,8 @@ func CreateNavMeshData(params *NavMeshCreateParams) ([]byte, int, bool) {
 				UserID: 0,
 			}
 			endPts := params.OffMeshConVerts[i*2*3:]
-			Vcopy(con.Pos[0:3], endPts[0:3])
-			Vcopy(con.Pos[3:6], endPts[3:6])
+			copy(con.Pos[0:3], endPts[0:3])
+			copy(con.Pos[3:6], endPts[3:6])
 			if params.OffMeshConDir[i] != 0 {
 				con.Flags = uint8(OffMeshConBidir)
 			}

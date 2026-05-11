@@ -209,45 +209,43 @@ func (q *ObstacleAvoidanceQuery) Reset() {
 }
 
 // AddCircle adds a circular obstacle.
-func (q *ObstacleAvoidanceQuery) AddCircle(pos *[3]float32, rad float32, vel, dvel *[3]float32) {
+func (q *ObstacleAvoidanceQuery) AddCircle(pos [3]float32, rad float32, vel, dvel [3]float32) {
 	if q.ncircles >= q.maxCircles {
 		return
 	}
 	cir := &q.circles[q.ncircles]
 	q.ncircles++
-	cir.P = *pos
+	cir.P = pos
 	cir.Rad = rad
-	cir.Vel = *vel
-	cir.DVel = *dvel
+	cir.Vel = vel
+	cir.DVel = dvel
 }
 
 // AddSegment adds a segment obstacle.
-func (q *ObstacleAvoidanceQuery) AddSegment(p, qp *[3]float32) {
+func (q *ObstacleAvoidanceQuery) AddSegment(p, qp [3]float32) {
 	if q.nsegments >= q.maxSegments {
 		return
 	}
 	seg := &q.segments[q.nsegments]
 	q.nsegments++
-	seg.P = *p
-	seg.Q = *qp
+	seg.P = p
+	seg.Q = qp
 }
 
-func (q *ObstacleAvoidanceQuery) prepare(pos, dvel *[3]float32) {
+func (q *ObstacleAvoidanceQuery) prepare(pos, dvel [3]float32) {
 	// Prepare obstacles
 	for i := 0; i < q.ncircles; i++ {
 		cir := &q.circles[i]
 
 		// Side
-		pa := pos
-		pb := &cir.P
+		pb := cir.P
 
 		var orig [3]float32
-		var dv [3]float32
-		vecSub(&cir.Dp, pb, pa)
-		vecNormalize(&cir.Dp)
-		vecSub(&dv, &cir.DVel, dvel)
+		cir.Dp = vecSub(pb, pos)
+		cir.Dp = vecNormalize(cir.Dp)
+		dv := vecSub(cir.DVel, dvel)
 
-		a := triArea2D(&orig, &cir.Dp, &dv)
+		a := triArea2D(orig, cir.Dp, dv)
 		if a < 0.01 {
 			cir.Np[0] = -cir.Dp[2]
 			cir.Np[2] = cir.Dp[0]
@@ -262,14 +260,14 @@ func (q *ObstacleAvoidanceQuery) prepare(pos, dvel *[3]float32) {
 
 		// Precalc if the agent is really close to the segment.
 		const r = 0.01
-		var t float32
-		seg.Touch = recastDistancePtSegSqr2D(pos, &seg.P, &seg.Q, &t) < r*r
+		distSqr, _ := recastDistancePtSegSqr2D(pos, seg.P, seg.Q)
+		seg.Touch = distSqr < r*r
 	}
 }
 
 // ProcessSample calculates the penalty for a given velocity vector.
-func (q *ObstacleAvoidanceQuery) ProcessSample(vcand *[3]float32, cs float32,
-	pos *[3]float32, rad float32, vel, dvel *[3]float32,
+func (q *ObstacleAvoidanceQuery) ProcessSample(vcand [3]float32, cs float32,
+	pos [3]float32, rad float32, vel, dvel [3]float32,
 	minPenalty float32, debug *ObstacleAvoidanceDebugData) float32 {
 
 	// Penalty for straying away from the desired and current velocities
@@ -292,20 +290,18 @@ func (q *ObstacleAvoidanceQuery) ProcessSample(vcand *[3]float32, cs float32,
 		cir := &q.circles[i]
 
 		// RVO
-		var vab [3]float32
-		vecCopy(&vab, vcand)
-		vecScale(&vab, 2)
-		vecSub(&vab, &vab, vel)
-		vecSub(&vab, &vab, &cir.Vel)
+		vab := vecScale(vcand, 2)
+		vab = vecSub(vab, vel)
+		vab = vecSub(vab, cir.Vel)
 
 		// Side
 		side += clampF32(
-			float32(math.Min(float64(vecDot2D(&cir.Dp, &vab)*0.5+0.5), float64(vecDot2D(&cir.Np, &vab)*2))),
+			float32(math.Min(float64(vecDot2D(cir.Dp, vab)*0.5+0.5), float64(vecDot2D(cir.Np, vab)*2))),
 			0, 1)
 		nside++
 
-		var htmin, htmax float32
-		if !sweepCircleCircle(pos, rad, &vab, &cir.P, cir.Rad, &htmin, &htmax) {
+		ok, htmin, htmax := sweepCircleCircle(pos, rad, vab, cir.P, cir.Rad)
+		if !ok {
 			continue
 		}
 
@@ -330,20 +326,22 @@ func (q *ObstacleAvoidanceQuery) ProcessSample(vcand *[3]float32, cs float32,
 
 		if seg.Touch {
 			// Special case when the agent is very close to the segment.
-			var sdir, snorm [3]float32
-			vecSub(&sdir, &seg.Q, &seg.P)
+			sdir := vecSub(seg.Q, seg.P)
+			var snorm [3]float32
 			snorm[0] = -sdir[2]
 			snorm[2] = sdir[0]
 			// If the velocity is pointing towards the segment, no collision.
-			if vecDot2D(&snorm, vcand) < 0 {
+			if vecDot2D(snorm, vcand) < 0 {
 				continue
 			}
 			// Else immediate collision.
 			htmin = 0
 		} else {
-			if !isectRaySeg(pos, vcand, &seg.P, &seg.Q, &htmin) {
+			ok, htminVal := isectRaySeg(pos, vcand, seg.P, seg.Q)
+			if !ok {
 				continue
 			}
+			htmin = htminVal
 		}
 
 		// Avoid less when facing walls.
@@ -369,16 +367,16 @@ func (q *ObstacleAvoidanceQuery) ProcessSample(vcand *[3]float32, cs float32,
 
 	// Store different penalties for debug viewing
 	if debug != nil {
-		debug.AddSample(vcand, cs, penalty, vpen, vcpen, spen, tpen)
+		debug.AddSample(&vcand, cs, penalty, vpen, vcpen, spen, tpen)
 	}
 
 	return penalty
 }
 
 // SampleVelocityGrid samples velocities on a grid pattern.
-func (q *ObstacleAvoidanceQuery) SampleVelocityGrid(pos *[3]float32, rad, vmax float32,
-	vel, dvel, nvel *[3]float32,
-	params *ObstacleAvoidanceParams, debug *ObstacleAvoidanceDebugData) int {
+func (q *ObstacleAvoidanceQuery) SampleVelocityGrid(pos [3]float32, rad, vmax float32,
+	vel, dvel [3]float32,
+	params *ObstacleAvoidanceParams, debug *ObstacleAvoidanceDebugData) ([3]float32, int) {
 
 	q.prepare(pos, dvel)
 
@@ -391,7 +389,7 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityGrid(pos *[3]float32, rad, vmax f
 		q.invVmax = float32(math.MaxFloat32)
 	}
 
-	*nvel = [3]float32{}
+	nvel := [3]float32{}
 
 	if debug != nil {
 		debug.Reset()
@@ -416,22 +414,22 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityGrid(pos *[3]float32, rad, vmax f
 				continue
 			}
 
-			penalty := q.ProcessSample(&vcand, cs, pos, rad, vel, dvel, minPenalty, debug)
+			penalty := q.ProcessSample(vcand, cs, pos, rad, vel, dvel, minPenalty, debug)
 			ns++
 			if penalty < minPenalty {
 				minPenalty = penalty
-				*nvel = vcand
+				nvel = vcand
 			}
 		}
 	}
 
-	return ns
+	return nvel, ns
 }
 
 // SampleVelocityAdaptive samples velocities using an adaptive pattern.
-func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos *[3]float32, rad, vmax float32,
-	vel, dvel, nvel *[3]float32,
-	params *ObstacleAvoidanceParams, debug *ObstacleAvoidanceDebugData) int {
+func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos [3]float32, rad, vmax float32,
+	vel, dvel [3]float32,
+	params *ObstacleAvoidanceParams, debug *ObstacleAvoidanceDebugData) ([3]float32, int) {
 
 	q.prepare(pos, dvel)
 
@@ -444,7 +442,7 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos *[3]float32, rad, vm
 		q.invVmax = float32(math.MaxFloat32)
 	}
 
-	*nvel = [3]float32{}
+	nvel := [3]float32{}
 
 	if debug != nil {
 		debug.Reset()
@@ -465,12 +463,12 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos *[3]float32, rad, vm
 	sa := float32(math.Sin(float64(da)))
 
 	// Desired direction
-	var ddir [6]float32
-	ddir[0] = dvel[0]
-	ddir[1] = dvel[1]
-	ddir[2] = dvel[2]
-	normalize2D(ddir[:3])
-	rotate2D(ddir[3:], ddir[:3], da*0.5)
+	var ddir0, ddir1 [3]float32
+	ddir0[0] = dvel[0]
+	ddir0[1] = dvel[1]
+	ddir0[2] = dvel[2]
+	ddir0 = vecNormalize2D(ddir0)
+	ddir1 = rotate2D(ddir0, da*0.5)
 
 	// Always add sample at zero
 	pat[npat*2+0] = 0
@@ -479,8 +477,9 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos *[3]float32, rad, vm
 
 	for j := 0; j < nr; j++ {
 		r := float32(nr-j) / float32(nr)
-		pat[npat*2+0] = ddir[(j%2)*3] * r
-		pat[npat*2+1] = ddir[(j%2)*3+2] * r
+		dir := [2][3]float32{ddir0, ddir1}
+		pat[npat*2+0] = dir[j%2][0] * r
+		pat[npat*2+1] = dir[j%2][2] * r
 		last1 := pat[npat*2:]
 		last2 := last1
 		npat++
@@ -527,7 +526,7 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos *[3]float32, rad, vm
 				continue
 			}
 
-			penalty := q.ProcessSample(&vcand, cr/10, pos, rad, vel, dvel, minPenalty, debug)
+			penalty := q.ProcessSample(vcand, cr/10, pos, rad, vel, dvel, minPenalty, debug)
 			ns++
 			if penalty < minPenalty {
 				minPenalty = penalty
@@ -539,9 +538,9 @@ func (q *ObstacleAvoidanceQuery) SampleVelocityAdaptive(pos *[3]float32, rad, vm
 		cr *= 0.5
 	}
 
-	*nvel = res
+	nvel = res
 
-	return ns
+	return nvel, ns
 }
 
 // GetObstacleCircleCount returns the number of obstacle circles.
@@ -566,66 +565,61 @@ func (q *ObstacleAvoidanceQuery) GetObstacleSegment(i int) *ObstacleSegment {
 
 // --- Internal helper functions ---
 
-func sweepCircleCircle(c0 *[3]float32, r0 float32, v, c1 *[3]float32, r1 float32, tmin, tmax *float32) bool {
+func sweepCircleCircle(c0 [3]float32, r0 float32, v, c1 [3]float32, r1 float32) (bool, float32, float32) {
 	const eps = 0.0001
-	var s [3]float32
-	vecSub(&s, c1, c0)
+	s := vecSub(c1, c0)
 	r := r0 + r1
-	c := vecDot2D(&s, &s) - r*r
+	c := vecDot2D(s, s) - r*r
 	a := vecDot2D(v, v)
 	if a < eps {
-		return false
+		return false, 0, 0
 	}
 
-	b := vecDot2D(v, &s)
+	b := vecDot2D(v, s)
 	d := b*b - a*c
 	if d < 0 {
-		return false
+		return false, 0, 0
 	}
 	a = 1.0 / a
 	rd := float32(math.Sqrt(float64(d)))
-	*tmin = (b - rd) * a
-	*tmax = (b + rd) * a
-	return true
+	tmin := (b - rd) * a
+	tmax := (b + rd) * a
+	return true, tmin, tmax
 }
 
-func isectRaySeg(ap, u, bp, bq *[3]float32, t *float32) bool {
-	var v, w [3]float32
-	vecSub(&v, bq, bp)
-	vecSub(&w, ap, bp)
-	d := vecPerp2D(u, &v)
+func isectRaySeg(ap, u, bp, bq [3]float32) (bool, float32) {
+	v := vecSub(bq, bp)
+	w := vecSub(ap, bp)
+	d := vecPerp2D(u, v)
 	if math.Abs(float64(d)) < 1e-6 {
-		return false
+		return false, 0
 	}
 	d = 1.0 / d
-	*t = vecPerp2D(&v, &w) * d
-	if *t < 0 || *t > 1 {
-		return false
+	t := vecPerp2D(v, w) * d
+	if t < 0 || t > 1 {
+		return false, 0
 	}
-	s := vecPerp2D(u, &w) * d
+	s := vecPerp2D(u, w) * d
 	if s < 0 || s > 1 {
-		return false
+		return false, 0
 	}
-	return true
+	return true, t
 }
 
-func normalize2D(v []float32) {
+func vecNormalize2D(v [3]float32) [3]float32 {
 	// v has x and z components at indices 0 and 2
 	d := float32(math.Sqrt(float64(v[0]*v[0] + v[2]*v[2])))
 	if d == 0 {
-		return
+		return v
 	}
 	d = 1.0 / d
-	v[0] *= d
-	v[2] *= d
+	return [3]float32{v[0] * d, v[1], v[2] * d}
 }
 
-func rotate2D(dest, v []float32, ang float32) {
+func rotate2D(v [3]float32, ang float32) [3]float32 {
 	c := float32(math.Cos(float64(ang)))
 	s := float32(math.Sin(float64(ang)))
-	dest[0] = v[0]*c - v[2]*s
-	dest[2] = v[0]*s + v[2]*c
-	dest[1] = v[1]
+	return [3]float32{v[0]*c - v[2]*s, v[1], v[0]*s + v[2]*c}
 }
 
 func clampInt(v, min, max int) int {

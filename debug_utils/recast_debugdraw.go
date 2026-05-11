@@ -40,13 +40,13 @@ func DebugDrawTriMesh(dd DebugDraw, verts []float32, nverts int, tris []int, nor
 		ax = (1 << ax) & 3
 		ay := (1 << ax) & 3
 
-		uva := []float32{va[ax] * texScale, va[ay] * texScale}
-		uvb := []float32{vb[ax] * texScale, vb[ay] * texScale}
-		uvc := []float32{vc[ax] * texScale, vc[ay] * texScale}
+		uva := [2]float32{va[ax] * texScale, va[ay] * texScale}
+		uvb := [2]float32{vb[ax] * texScale, vb[ay] * texScale}
+		uvc := [2]float32{vc[ax] * texScale, vc[ay] * texScale}
 
-		dd.VertexPosColorUV(va, color, uva)
-		dd.VertexPosColorUV(vb, color, uvb)
-		dd.VertexPosColorUV(vc, color, uvc)
+		dd.VertexPosColorUV([3]float32{va[0], va[1], va[2]}, color, uva)
+		dd.VertexPosColorUV([3]float32{vb[0], vb[1], vb[2]}, color, uvb)
+		dd.VertexPosColorUV([3]float32{vc[0], vc[1], vc[2]}, color, uvc)
 	}
 	dd.End()
 	dd.Texture(false)
@@ -88,13 +88,13 @@ func DebugDrawTriMeshSlope(dd DebugDraw, verts []float32, nverts int, tris []int
 		ax = (1 << ax) & 3
 		ay := (1 << ax) & 3
 
-		uva := []float32{va[ax] * texScale, va[ay] * texScale}
-		uvb := []float32{vb[ax] * texScale, vb[ay] * texScale}
-		uvc := []float32{vc[ax] * texScale, vc[ay] * texScale}
+		uva := [2]float32{va[ax] * texScale, va[ay] * texScale}
+		uvb := [2]float32{vb[ax] * texScale, vb[ay] * texScale}
+		uvc := [2]float32{vc[ax] * texScale, vc[ay] * texScale}
 
-		dd.VertexPosColorUV(va, color, uva)
-		dd.VertexPosColorUV(vb, color, uvb)
-		dd.VertexPosColorUV(vc, color, uvc)
+		dd.VertexPosColorUV([3]float32{va[0], va[1], va[2]}, color, uva)
+		dd.VertexPosColorUV([3]float32{vb[0], vb[1], vb[2]}, color, uvb)
+		dd.VertexPosColorUV([3]float32{vc[0], vc[1], vc[2]}, color, uvc)
 	}
 	dd.End()
 	dd.Texture(false)
@@ -112,8 +112,7 @@ func DebugDrawHeightfieldSolid(dd DebugDraw, hf *recast.Heightfield) {
 	w := hf.Width
 	h := hf.Height
 
-	fcol := make([]uint32, 6)
-	CalcBoxColors(fcol, RGBA(255, 255, 255, 255), RGBA(255, 255, 255, 255))
+	fcol := CalcBoxColors(RGBA(255, 255, 255, 255), RGBA(255, 255, 255, 255))
 
 	dd.Begin(DrawQuads, 1.0)
 
@@ -123,7 +122,7 @@ func DebugDrawHeightfieldSolid(dd DebugDraw, hf *recast.Heightfield) {
 			fz := orig[2] + float32(y)*cs
 			s := hf.Spans[x+y*w]
 			for s != nil {
-				AppendBox(dd, fx, orig[1]+float32(s.Smin)*ch, fz, fx+cs, orig[1]+float32(s.Smax)*ch, fz+cs, fcol)
+				AppendBox(dd, fx, orig[1]+float32(s.Smin)*ch, fz, fx+cs, orig[1]+float32(s.Smax)*ch, fz+cs, fcol[:])
 				s = s.Next
 			}
 		}
@@ -143,8 +142,7 @@ func DebugDrawHeightfieldWalkable(dd DebugDraw, hf *recast.Heightfield) {
 	w := hf.Width
 	h := hf.Height
 
-	fcol := make([]uint32, 6)
-	CalcBoxColors(fcol, RGBA(255, 255, 255, 255), RGBA(217, 217, 217, 255))
+	fcol := CalcBoxColors(RGBA(255, 255, 255, 255), RGBA(217, 217, 217, 255))
 
 	dd.Begin(DrawQuads, 1.0)
 
@@ -161,7 +159,7 @@ func DebugDrawHeightfieldWalkable(dd DebugDraw, hf *recast.Heightfield) {
 				} else {
 					fcol[0] = MultCol(dd.AreaToCol(s.Area), 200)
 				}
-				AppendBox(dd, fx, orig[1]+float32(s.Smin)*ch, fz, fx+cs, orig[1]+float32(s.Smax)*ch, fz+cs, fcol)
+				AppendBox(dd, fx, orig[1]+float32(s.Smin)*ch, fz, fx+cs, orig[1]+float32(s.Smax)*ch, fz+cs, fcol[:])
 				s = s.Next
 			}
 		}
@@ -465,7 +463,7 @@ func DebugDrawRegionConnections(dd DebugDraw, cset *recast.ContourSet, alpha flo
 		cont := &cset.Conts[i]
 		col := DarkenCol(IntToCol(int(cont.Reg), int(a)))
 		pos := getContourCenter(cont, orig, cs, ch)
-		dd.VertexPosColor(pos[:], col)
+		dd.VertexPosColor(pos, col)
 	}
 	dd.End()
 }
@@ -717,9 +715,9 @@ func DebugDrawPolyMeshDetail(dd DebugDraw, dmesh *recast.PolyMeshDetail) {
 		color := IntToCol(i, 192)
 		for j := 0; j < ntris; j++ {
 			t := tris[j*4:]
-			dd.VertexPosColor(verts[t[0]*3:], color)
-			dd.VertexPosColor(verts[t[1]*3:], color)
-			dd.VertexPosColor(verts[t[2]*3:], color)
+			dd.VertexPosColor([3]float32{verts[t[0]*3], verts[t[0]*3+1], verts[t[0]*3+2]}, color)
+			dd.VertexPosColor([3]float32{verts[t[1]*3], verts[t[1]*3+1], verts[t[1]*3+2]}, color)
+			dd.VertexPosColor([3]float32{verts[t[2]*3], verts[t[2]*3+1], verts[t[2]*3+2]}, color)
 		}
 	}
 	dd.End()
@@ -741,8 +739,8 @@ func DebugDrawPolyMeshDetail(dd DebugDraw, dmesh *recast.PolyMeshDetail) {
 				ef := (t[3] >> (uint(kp) * 2)) & 0x3
 				if ef == 0 {
 					if t[kp] < t[k] {
-						dd.VertexPosColor(verts[t[kp]*3:], coli)
-						dd.VertexPosColor(verts[t[k]*3:], coli)
+						dd.VertexPosColor([3]float32{verts[t[kp]*3], verts[t[kp]*3+1], verts[t[kp]*3+2]}, coli)
+						dd.VertexPosColor([3]float32{verts[t[k]*3], verts[t[k]*3+1], verts[t[k]*3+2]}, coli)
 					}
 				}
 			}
@@ -766,8 +764,8 @@ func DebugDrawPolyMeshDetail(dd DebugDraw, dmesh *recast.PolyMeshDetail) {
 			for k, kp := 0, 2; k < 3; kp, k = k, k+1 {
 				ef := (t[3] >> (uint(kp) * 2)) & 0x3
 				if ef != 0 {
-					dd.VertexPosColor(verts[t[kp]*3:], cole)
-					dd.VertexPosColor(verts[t[k]*3:], cole)
+					dd.VertexPosColor([3]float32{verts[t[kp]*3], verts[t[kp]*3+1], verts[t[kp]*3+2]}, cole)
+					dd.VertexPosColor([3]float32{verts[t[k]*3], verts[t[k]*3+1], verts[t[k]*3+2]}, cole)
 				}
 			}
 		}
@@ -783,7 +781,7 @@ func DebugDrawPolyMeshDetail(dd DebugDraw, dmesh *recast.PolyMeshDetail) {
 		nverts := int(m[1])
 		verts := dmesh.Verts[bverts*3:]
 		for j := 0; j < nverts; j++ {
-			dd.VertexPosColor(verts[j*3:j*3+3], colvp)
+			dd.VertexPosColor([3]float32{verts[j*3], verts[j*3+1], verts[j*3+2]}, colvp)
 		}
 	}
 	dd.End()

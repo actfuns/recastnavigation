@@ -22,8 +22,8 @@ const (
 
 // CalcBounds calculates the bounding box of an array of vertices.
 func CalcBounds(verts []float32, numVerts int) (minBounds, maxBounds [3]float32) {
-	minBounds = Vcopy([3]float32{verts[0], verts[1], verts[2]})
-	maxBounds = Vcopy([3]float32{verts[0], verts[1], verts[2]})
+	minBounds = [3]float32{verts[0], verts[1], verts[2]}
+	maxBounds = [3]float32{verts[0], verts[1], verts[2]}
 	for i := 1; i < numVerts; i++ {
 		v := [3]float32{verts[i*3], verts[i*3+1], verts[i*3+2]}
 		minBounds = Vmin(minBounds, v)
@@ -33,22 +33,23 @@ func CalcBounds(verts []float32, numVerts int) (minBounds, maxBounds [3]float32)
 }
 
 // CalcGridSize calculates the grid size based on the bounding box and grid cell size.
-func CalcGridSize(minBounds, maxBounds *[3]float32, cellSize float32) (int, int) {
+func CalcGridSize(minBounds, maxBounds [3]float32, cellSize float32) (int, int) {
 	sizeX := int((maxBounds[0]-minBounds[0])/cellSize + 0.5)
 	sizeZ := int((maxBounds[2]-minBounds[2])/cellSize + 0.5)
 	return sizeX, sizeZ
 }
 
-// CreateHeightfield initializes a new heightfield.
-func CreateHeightfield(ctx *Context, hf *Heightfield, sizeX, sizeZ int, minBounds, maxBounds *[3]float32, cellSize, cellHeight float32) bool {
-	hf.Width = sizeX
-	hf.Height = sizeZ
-	hf.Bmin = Vcopy(*minBounds)
-	hf.Bmax = Vcopy(*maxBounds)
-	hf.Cs = cellSize
-	hf.Ch = cellHeight
-	hf.Spans = make([]*Span, hf.Width*hf.Height)
-	return true
+// CreateHeightfield initializes and returns a new heightfield.
+func CreateHeightfield(ctx *Context, sizeX, sizeZ int, minBounds, maxBounds [3]float32, cellSize, cellHeight float32) *Heightfield {
+	return &Heightfield{
+		Width:  sizeX,
+		Height: sizeZ,
+		Bmin:   minBounds,
+		Bmax:   maxBounds,
+		Cs:     cellSize,
+		Ch:     cellHeight,
+		Spans:  make([]*Span, sizeX*sizeZ),
+	}
 }
 
 // MarkWalkableTriangles sets the area id of all triangles with a slope below the specified value to WalkableArea.
@@ -97,10 +98,10 @@ func HeightFieldSpanCount(ctx *Context, hf *Heightfield) int {
 	return spanCount
 }
 
-// BuildCompactHeightfield builds a compact heightfield representing open space, from a heightfield representing solid space.
-func BuildCompactHeightfield(ctx *Context, walkableHeight, walkableClimb int, hf *Heightfield, chf *CompactHeightfield) (bool, error) {
+// BuildCompactHeightfield builds and returns a compact heightfield representing open space, from a heightfield representing solid space.
+func BuildCompactHeightfield(ctx *Context, walkableHeight, walkableClimb int, hf *Heightfield) (*CompactHeightfield, error) {
 	if ctx == nil {
-		return false, fmt.Errorf("recast: ctx must not be nil")
+		return nil, fmt.Errorf("recast: ctx must not be nil")
 	}
 
 	defer ctx.ScopedTimer(TimerBuildCompactHeightfield)()
@@ -110,14 +111,15 @@ func BuildCompactHeightfield(ctx *Context, walkableHeight, walkableClimb int, hf
 	spanCount := HeightFieldSpanCount(ctx, hf)
 
 	// Fill in header.
+	chf := &CompactHeightfield{}
 	chf.Width = xSize
 	chf.Height = zSize
 	chf.SpanCount = spanCount
 	chf.WalkableHeight = walkableHeight
 	chf.WalkableClimb = walkableClimb
 	chf.MaxRegions = 0
-	chf.Bmin = Vcopy(hf.Bmin)
-	chf.Bmax = Vcopy(hf.Bmax)
+	chf.Bmin = hf.Bmin
+	chf.Bmax = hf.Bmax
 	chf.Bmax[1] += float32(walkableHeight) * hf.Ch
 	chf.Cs = hf.Cs
 	chf.Ch = hf.Ch
@@ -215,5 +217,5 @@ func BuildCompactHeightfield(ctx *Context, walkableHeight, walkableClimb int, hf
 		ctx.Log(LogError, "BuildCompactHeightfield: Heightfield has too many layers %d (max: %d)", maxLayerIndex, maxLayers)
 	}
 
-	return true, nil
+	return chf, nil
 }

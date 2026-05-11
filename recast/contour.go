@@ -39,22 +39,6 @@ type PotentialDiagonal struct {
 	dist int
 }
 
-// slice-based vector helpers (operate on []float32 slices)
-func vsub(dest, a, b []float32) {
-	dest[0] = a[0] - b[0]
-	dest[1] = a[1] - b[1]
-	dest[2] = a[2] - b[2]
-}
-func vadd(dest, a, b []float32) {
-	dest[0] = a[0] + b[0]
-	dest[1] = a[1] + b[1]
-	dest[2] = a[2] + b[2]
-}
-func vcopy(dest, src []float32) {
-	dest[0] = src[0]
-	dest[1] = src[1]
-	dest[2] = src[2]
-}
 func clamp(v, mn, mx int) int {
 	if v < mn {
 		return mn
@@ -65,21 +49,21 @@ func clamp(v, mn, mx int) int {
 	return v
 }
 
-func vdot2(a, b []float32) float32 {
+func vdot2(a, b [3]float32) float32 {
 	return a[0]*b[0] + a[2]*b[2]
 }
 
-func vdistSq2(p, q []float32) float32 {
+func vdistSq2(p, q [3]float32) float32 {
 	dx := q[0] - p[0]
 	dy := q[2] - p[2]
 	return dx*dx + dy*dy
 }
 
-func vdist2(p, q []float32) float32 {
+func vdist2(p, q [3]float32) float32 {
 	return float32(math.Sqrt(float64(vdistSq2(p, q))))
 }
 
-func vcross2(p1, p2, p3 []float32) float32 {
+func vcross2(p1, p2, p3 [3]float32) float32 {
 	u1 := p2[0] - p1[0]
 	v1 := p2[2] - p1[2]
 	u2 := p3[0] - p1[0]
@@ -87,38 +71,34 @@ func vcross2(p1, p2, p3 []float32) float32 {
 	return u1*v2 - v1*u2
 }
 
-func circumCircle(p1, p2, p3 []float32, c []float32) (float32, bool) {
+func circumCircle(p1, p2, p3 [3]float32) (c [3]float32, r float32, ok bool) {
 	const eps float32 = 1e-6
-	v1 := []float32{0, 0, 0}
-	v2 := make([]float32, 3)
-	v3 := make([]float32, 3)
-	vsub(v2, p2, p1)
-	vsub(v3, p3, p1)
 
-	cp := vcross2(v1, v2, v3)
+	// Compute edges from p1.
+	// v1 is intentionally left as zero vector here (mirrors the original C code structure).
+	v2 := Vsub(p2, p1)
+	v3 := Vsub(p3, p1)
+
+	// 2D cross product of v2 and v3 in xz plane.
+	cp := v2[0]*v3[2] - v3[0]*v2[2]
 	if float32(math.Abs(float64(cp))) > eps {
-		v1Sq := vdot2(v1, v1)
 		v2Sq := vdot2(v2, v2)
 		v3Sq := vdot2(v3, v3)
-		c[0] = (v1Sq*(v2[2]-v3[2]) + v2Sq*(v3[2]-v1[2]) + v3Sq*(v1[2]-v2[2])) / (2 * cp)
+		c[0] = (v2Sq*(v3[2]-0) + v3Sq*(0-v2[2]) + 0*(v2[0]-v3[0])) / (2 * cp)
 		c[1] = 0
-		c[2] = (v1Sq*(v3[0]-v2[0]) + v2Sq*(v1[0]-v3[0]) + v3Sq*(v2[0]-v1[0])) / (2 * cp)
-		r := vdist2(c, v1)
-		vadd(c, c, p1)
-		return r, true
+		c[2] = (v2Sq*(v3[0]-0) + v3Sq*(0-v2[0]) + 0*(v2[0]-v3[0])) / (2 * cp)
+		r = vdist2(c, v2)
+		c = Vadd(c, p1)
+		return c, r, true
 	}
 
-	vcopy(c, p1)
-	return 0, false
+	return p1, 0, false
 }
 
-func distPtTri(p, a, b, c []float32) float32 {
-	v0 := make([]float32, 3)
-	v1 := make([]float32, 3)
-	v2 := make([]float32, 3)
-	vsub(v0, c, a)
-	vsub(v1, b, a)
-	vsub(v2, p, a)
+func distPtTri(p, a, b, c [3]float32) float32 {
+	v0 := Vsub(c, a)
+	v1 := Vsub(b, a)
+	v2 := Vsub(p, a)
 
 	dot00 := vdot2(v0, v0)
 	dot01 := vdot2(v0, v1)
@@ -138,7 +118,7 @@ func distPtTri(p, a, b, c []float32) float32 {
 	return math.MaxFloat32
 }
 
-func distancePtSeg(pt, p, q []float32) float32 {
+func distancePtSeg(pt, p, q [3]float32) float32 {
 	pqx := q[0] - p[0]
 	pqy := q[1] - p[1]
 	pqz := q[2] - p[2]
@@ -163,7 +143,7 @@ func distancePtSeg(pt, p, q []float32) float32 {
 	return dx*dx + dy*dy + dz*dz
 }
 
-func distancePtSeg2d(pt, p, q []float32) float32 {
+func distancePtSeg2d(pt, p, q [3]float32) float32 {
 	pqx := q[0] - p[0]
 	pqz := q[2] - p[2]
 	dx := pt[0] - p[0]
@@ -185,12 +165,12 @@ func distancePtSeg2d(pt, p, q []float32) float32 {
 	return dx*dx + dz*dz
 }
 
-func distToTriMesh(p []float32, verts []float32, tris []int, ntris int) float32 {
+func distToTriMesh(p [3]float32, verts []float32, tris []int, ntris int) float32 {
 	dmin := float32(math.MaxFloat32)
 	for i := 0; i < ntris; i++ {
-		va := verts[tris[i*4+0]*3 : tris[i*4+0]*3+3]
-		vb := verts[tris[i*4+1]*3 : tris[i*4+1]*3+3]
-		vc := verts[tris[i*4+2]*3 : tris[i*4+2]*3+3]
+		va := toV3(verts[tris[i*4+0]*3:])
+		vb := toV3(verts[tris[i*4+1]*3:])
+		vc := toV3(verts[tris[i*4+2]*3:])
 		d := distPtTri(p, va, vb, vc)
 		if d < dmin {
 			dmin = d
@@ -202,14 +182,18 @@ func distToTriMesh(p []float32, verts []float32, tris []int, ntris int) float32 
 	return dmin
 }
 
-func distToPoly(nvert int, verts []float32, p []float32) float32 {
+func toV3(s []float32) [3]float32 {
+	return [3]float32{s[0], s[1], s[2]}
+}
+
+func distToPoly(nvert int, verts []float32, p [3]float32) float32 {
 	dmin := float32(math.MaxFloat32)
 	var i, j int
 	c := false
 	for i, j = 0, nvert-1; i < nvert; j = i {
 		i++
-		vi := verts[i*3 : i*3+3]
-		vj := verts[j*3 : j*3+3]
+		vi := toV3(verts[i*3:])
+		vj := toV3(verts[j*3:])
 		if (vi[2] > p[2]) != (vj[2] > p[2]) &&
 			p[0] < (vj[0]-vi[0])*(p[2]-vi[2])/(vj[2]-vi[2])+vi[0] {
 			c = !c
@@ -311,7 +295,7 @@ func updateLeftFace(e []int, s, t, f int) {
 	}
 }
 
-func overlapSegSeg2d(a, b, c, d []float32) int {
+func overlapSegSeg2d(a, b, c, d [3]float32) int {
 	a1 := vcross2(a, b, d)
 	a2 := vcross2(a, b, c)
 	if a1*a2 < 0 {
@@ -325,13 +309,16 @@ func overlapSegSeg2d(a, b, c, d []float32) int {
 }
 
 func overlapEdges(pts []float32, edges []int, nedges, s1, t1 int) bool {
+	ps1 := toV3(pts[s1*3:])
+	pt1 := toV3(pts[t1*3:])
+
 	for i := 0; i < nedges; i++ {
 		s0 := edges[i*4+0]
 		t0 := edges[i*4+1]
 		if s0 == s1 || s0 == t1 || t0 == s1 || t0 == t1 {
 			continue
 		}
-		if overlapSegSeg2d(pts[s0*3:s0*3+3], pts[t0*3:t0*3+3], pts[s1*3:s1*3+3], pts[t1*3:t1*3+3]) != 0 {
+		if overlapSegSeg2d(toV3(pts[s0*3:]), toV3(pts[t0*3:]), ps1, pt1) != 0 {
 			return true
 		}
 	}
@@ -355,25 +342,28 @@ func completeFacet(pts []float32, npts int, edges []int, nedges *int, maxEdges i
 	}
 
 	pt := npts
-	c := []float32{0, 0, 0}
+	c := [3]float32{}
 	r := float32(-1)
 	for u := 0; u < npts; u++ {
 		if u == s || u == t {
 			continue
 		}
-		if vcross2(pts[s*3:s*3+3], pts[t*3:t*3+3], pts[u*3:u*3+3]) > eps {
+		ps := toV3(pts[s*3:])
+		ptv := toV3(pts[t*3:])
+		pu := toV3(pts[u*3:])
+		if vcross2(ps, ptv, pu) > eps {
 			if r < 0 {
 				pt = u
-				r, _ = circumCircle(pts[s*3:s*3+3], pts[t*3:t*3+3], pts[u*3:u*3+3], c)
+				c, r, _ = circumCircle(ps, ptv, pu)
 				continue
 			}
-			d := vdist2(c, pts[u*3:u*3+3])
+			d := vdist2(c, pu)
 			const tol float32 = 0.001
 			if d > r*(1+tol) {
 				continue
 			} else if d < r*(1-tol) {
 				pt = u
-				r, _ = circumCircle(pts[s*3:s*3+3], pts[t*3:t*3+3], pts[u*3:u*3+3], c)
+				c, r, _ = circumCircle(ps, ptv, pu)
 			} else {
 				if overlapEdges(pts, edges, *nedges, s, u) {
 					continue
@@ -382,7 +372,7 @@ func completeFacet(pts []float32, npts int, edges []int, nedges *int, maxEdges i
 					continue
 				}
 				pt = u
-				r, _ = circumCircle(pts[s*3:s*3+3], pts[t*3:t*3+3], pts[u*3:u*3+3], c)
+				c, r, _ = circumCircle(ps, ptv, pu)
 			}
 		}
 	}
@@ -480,14 +470,14 @@ func polyMinExtent(verts []float32, nverts int) float32 {
 	minDist := float32(math.MaxFloat32)
 	for i := 0; i < nverts; i++ {
 		ni := (i + 1) % nverts
-		p1 := verts[i*3 : i*3+3]
-		p2 := verts[ni*3 : ni*3+3]
+		p1 := toV3(verts[i*3:])
+		p2 := toV3(verts[ni*3:])
 		maxEdgeDist := float32(0)
 		for j := 0; j < nverts; j++ {
 			if j == i || j == ni {
 				continue
 			}
-			d := distancePtSeg2d(verts[j*3:j*3+3], p1, p2)
+			d := distancePtSeg2d(toV3(verts[j*3:]), p1, p2)
 			if d > maxEdgeDist {
 				maxEdgeDist = d
 			}
@@ -525,9 +515,9 @@ func triangulateHull(nverts int, verts []float32, nhull int, hull []int, nin int
 		}
 		pi := prevIdx(i, nhull)
 		ni := nextIdx(i, nhull)
-		pv := verts[hull[pi]*3 : hull[pi]*3+3]
-		cv := verts[hull[i]*3 : hull[i]*3+3]
-		nv := verts[hull[ni]*3 : hull[ni]*3+3]
+		pv := [3]float32{verts[hull[pi]*3], verts[hull[pi]*3+1], verts[hull[pi]*3+2]}
+		cv := [3]float32{verts[hull[i]*3], verts[hull[i]*3+1], verts[hull[i]*3+2]}
+		nv := [3]float32{verts[hull[ni]*3], verts[hull[ni]*3+1], verts[hull[ni]*3+2]}
 		d := vdist2(pv, cv) + vdist2(cv, nv) + vdist2(nv, pv)
 		if d < dmin {
 			start = i
@@ -543,10 +533,10 @@ func triangulateHull(nverts int, verts []float32, nhull int, hull []int, nin int
 		nleft := nextIdx(left, nhull)
 		nright := prevIdx(right, nhull)
 
-		cvleft := verts[hull[left]*3 : hull[left]*3+3]
-		nvleft := verts[hull[nleft]*3 : hull[nleft]*3+3]
-		cvright := verts[hull[right]*3 : hull[right]*3+3]
-		nvright := verts[hull[nright]*3 : hull[nright]*3+3]
+		cvleft := [3]float32{verts[hull[left]*3], verts[hull[left]*3+1], verts[hull[left]*3+2]}
+		nvleft := [3]float32{verts[hull[nleft]*3], verts[hull[nleft]*3+1], verts[hull[nleft]*3+2]}
+		cvright := [3]float32{verts[hull[right]*3], verts[hull[right]*3+1], verts[hull[right]*3+2]}
+		nvright := [3]float32{verts[hull[nright]*3], verts[hull[nright]*3+1], verts[hull[nright]*3+2]}
 		dleft := vdist2(cvleft, nvleft) + vdist2(nvleft, cvright)
 		dright := vdist2(cvright, nvright) + vdist2(cvleft, nvright)
 
@@ -605,7 +595,7 @@ func setTriFlags(tris *[]int, nhull int, hull []int) {
 
 // ---- Contour Building Functions (from RecastContour.cpp) ----
 
-func getCornerHeight(x, y, i, dir int, chf *CompactHeightfield, isBorderVertex *bool) int {
+func getCornerHeight(x, y, i, dir int, chf *CompactHeightfield) (int, bool) {
 	s := chf.Spans[i]
 	ch := int(s.Y)
 	dirp := (dir + 1) & 0x3
@@ -645,6 +635,7 @@ func getCornerHeight(x, y, i, dir int, chf *CompactHeightfield, isBorderVertex *
 			regs[2] = uint32(chf.Spans[ai2].Reg) | (uint32(chf.Areas[ai2]) << 16)
 		}
 	}
+		isBorderVertex := false
 
 	for j := 0; j < 4; j++ {
 		a := j
@@ -657,15 +648,15 @@ func getCornerHeight(x, y, i, dir int, chf *CompactHeightfield, isBorderVertex *
 		intsSameArea := (regs[c] >> 16) == (regs[d] >> 16)
 		noZeros := regs[a] != 0 && regs[b] != 0 && regs[c] != 0 && regs[d] != 0
 		if twoSameExts && twoInts && intsSameArea && noZeros {
-			*isBorderVertex = true
+			isBorderVertex = true
 			break
 		}
 	}
 
-	return ch
+	return ch, isBorderVertex
 }
 
-func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]int) {
+func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points []int) []int {
 	var dir uint8 = 0
 	for (flags[i] & (1 << dir)) == 0 {
 		dir++
@@ -683,7 +674,7 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]
 			isBorderVertex := false
 			isAreaBorder := false
 			px := x
-			py := getCornerHeight(x, y, i, int(dir), chf, &isBorderVertex)
+			var py int; py, isBorderVertex = getCornerHeight(x, y, i, int(dir), chf)
 			pz := y
 			switch dir {
 			case 0:
@@ -712,7 +703,7 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]
 			if isAreaBorder {
 				r |= areaBorder
 			}
-			*points = append(*points, px, py, pz, r)
+			points = append(points, px, py, pz, r)
 
 			flags[i] &= ^(1 << dir)
 			dir = (dir + 1) & 0x3
@@ -726,7 +717,7 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]
 				ni = int(nc.Index) + Con(&s, int(dir))
 			}
 			if ni == -1 {
-				return
+				return points
 			}
 			x = nx
 			y = ny
@@ -738,6 +729,7 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]
 			break
 		}
 	}
+	return points
 }
 
 func distancePtSegInt(x, z, px, pz, qx, qz int) float32 {
@@ -762,39 +754,40 @@ func distancePtSegInt(x, z, px, pz, qx, qz int) float32 {
 	return dx*dx + dz*dz
 }
 
-func simplifyContour(points, simplified *[]int, maxError float32, maxEdgeLen int, buildFlags int) {
+func simplifyContour(points []int, maxError float32, maxEdgeLen int, buildFlags int) []int {
+	simplified := make([]int, 0, 64)
 	hasConnections := false
-	for i := 0; i < len(*points); i += 4 {
-		if ((*points)[i+3] & contourRegMask) != 0 {
+	for i := 0; i < len(points); i += 4 {
+		if (points[i+3] & contourRegMask) != 0 {
 			hasConnections = true
 			break
 		}
 	}
 
 	if hasConnections {
-		for i := 0; i < len(*points)/4; i++ {
-			ii := (i + 1) % (len(*points) / 4)
-			differentRegs := ((*points)[i*4+3] & contourRegMask) != ((*points)[ii*4+3] & contourRegMask)
-			areaBorders := ((*points)[i*4+3] & areaBorder) != ((*points)[ii*4+3] & areaBorder)
+		for i := 0; i < len(points)/4; i++ {
+			ii := (i + 1) % (len(points) / 4)
+			differentRegs := (points[i*4+3] & contourRegMask) != (points[ii*4+3] & contourRegMask)
+			areaBorders := (points[i*4+3] & areaBorder) != (points[ii*4+3] & areaBorder)
 			if differentRegs || areaBorders {
-				*simplified = append(*simplified, (*points)[i*4+0], (*points)[i*4+1], (*points)[i*4+2], i)
+				simplified = append(simplified, points[i*4+0], points[i*4+1], points[i*4+2], i)
 			}
 		}
 	}
 
-	if len(*simplified) == 0 {
-		llx := (*points)[0]
-		lly := (*points)[1]
-		llz := (*points)[2]
+	if len(simplified) == 0 {
+		llx := points[0]
+		lly := points[1]
+		llz := points[2]
 		lli := 0
-		urx := (*points)[0]
-		ury := (*points)[1]
-		urz := (*points)[2]
+		urx := points[0]
+		ury := points[1]
+		urz := points[2]
 		uri := 0
-		for i := 0; i < len(*points); i += 4 {
-			x := (*points)[i+0]
-			y := (*points)[i+1]
-			z := (*points)[i+2]
+		for i := 0; i < len(points); i += 4 {
+			x := points[i+0]
+			y := points[i+1]
+			z := points[i+2]
 			if x < llx || (x == llx && z < llz) {
 				llx = x
 				lly = y
@@ -808,21 +801,21 @@ func simplifyContour(points, simplified *[]int, maxError float32, maxEdgeLen int
 				uri = i / 4
 			}
 		}
-		*simplified = append(*simplified, llx, lly, llz, lli)
-		*simplified = append(*simplified, urx, ury, urz, uri)
+		simplified = append(simplified, llx, lly, llz, lli)
+		simplified = append(simplified, urx, ury, urz, uri)
 	}
 
-	pn := len(*points) / 4
-	for i := 0; i < len(*simplified)/4; {
-		ii := (i + 1) % (len(*simplified) / 4)
+	pn := len(points) / 4
+	for i := 0; i < len(simplified)/4; {
+		ii := (i + 1) % (len(simplified) / 4)
 
-		ax := (*simplified)[i*4+0]
-		az := (*simplified)[i*4+2]
-		ai := (*simplified)[i*4+3]
+		ax := simplified[i*4+0]
+		az := simplified[i*4+2]
+		ai := simplified[i*4+3]
 
-		bx := (*simplified)[ii*4+0]
-		bz := (*simplified)[ii*4+2]
-		bi := (*simplified)[ii*4+3]
+		bx := simplified[ii*4+0]
+		bz := simplified[ii*4+2]
+		bi := simplified[ii*4+3]
 
 		maxd := float32(0)
 		maxi := -1
@@ -840,10 +833,10 @@ func simplifyContour(points, simplified *[]int, maxError float32, maxEdgeLen int
 			az, bz = bz, az
 		}
 
-		if ((*points)[ci*4+3]&contourRegMask) == 0 ||
-			((*points)[ci*4+3]&areaBorder) != 0 {
+		if (points[ci*4+3]&contourRegMask) == 0 ||
+			(points[ci*4+3]&areaBorder) != 0 {
 			for ci != endi {
-				d := distancePtSegInt((*points)[ci*4+0], (*points)[ci*4+2], ax, az, bx, bz)
+				d := distancePtSegInt(points[ci*4+0], points[ci*4+2], ax, az, bx, bz)
 				if d > maxd {
 					maxd = d
 					maxi = ci
@@ -853,33 +846,33 @@ func simplifyContour(points, simplified *[]int, maxError float32, maxEdgeLen int
 		}
 
 		if maxi != -1 && maxd > (maxError*maxError) {
-			newVert := []int{(*points)[maxi*4+0], (*points)[maxi*4+1], (*points)[maxi*4+2], maxi}
-			*simplified = append((*simplified)[:(i+1)*4], append(newVert, (*simplified)[(i+1)*4:]...)...)
+			newVert := []int{points[maxi*4+0], points[maxi*4+1], points[maxi*4+2], maxi}
+			simplified = append(simplified[:(i+1)*4], append(newVert, simplified[(i+1)*4:]...)...)
 		} else {
 			i++
 		}
 	}
 
 	if maxEdgeLen > 0 && (buildFlags&int(contourTessWallEdges|contourTessAreaEdges)) != 0 {
-		for i := 0; i < len(*simplified)/4; {
-			ii := (i + 1) % (len(*simplified) / 4)
+		for i := 0; i < len(simplified)/4; {
+			ii := (i + 1) % (len(simplified) / 4)
 
-			ax := (*simplified)[i*4+0]
-			az := (*simplified)[i*4+2]
-			ai := (*simplified)[i*4+3]
+			ax := simplified[i*4+0]
+			az := simplified[i*4+2]
+			ai := simplified[i*4+3]
 
-			bx := (*simplified)[ii*4+0]
-			bz := (*simplified)[ii*4+2]
-			bi := (*simplified)[ii*4+3]
+			bx := simplified[ii*4+0]
+			bz := simplified[ii*4+2]
+			bi := simplified[ii*4+3]
 
 			maxi := -1
 			ci := (ai + 1) % pn
 
 			tess := false
-			if (buildFlags&int(contourTessWallEdges)) != 0 && ((*points)[ci*4+3]&contourRegMask) == 0 {
+			if (buildFlags&int(contourTessWallEdges)) != 0 && (points[ci*4+3]&contourRegMask) == 0 {
 				tess = true
 			}
-			if (buildFlags&int(contourTessAreaEdges)) != 0 && ((*points)[ci*4+3]&areaBorder) != 0 {
+			if (buildFlags&int(contourTessAreaEdges)) != 0 && (points[ci*4+3]&areaBorder) != 0 {
 				tess = true
 			}
 
@@ -904,19 +897,21 @@ func simplifyContour(points, simplified *[]int, maxError float32, maxEdgeLen int
 			}
 
 			if maxi != -1 {
-				newVert := []int{(*points)[maxi*4+0], (*points)[maxi*4+1], (*points)[maxi*4+2], maxi}
-				*simplified = append((*simplified)[:(i+1)*4], append(newVert, (*simplified)[(i+1)*4:]...)...)
+				newVert := []int{points[maxi*4+0], points[maxi*4+1], points[maxi*4+2], maxi}
+				simplified = append(simplified[:(i+1)*4], append(newVert, simplified[(i+1)*4:]...)...)
 			} else {
 				i++
 			}
 		}
 	}
 
-	for i := 0; i < len(*simplified)/4; i++ {
-		ai := ((*simplified)[i*4+3] + 1) % pn
-		bi := (*simplified)[i*4+3]
-		(*simplified)[i*4+3] = ((*points)[ai*4+3] & (contourRegMask | areaBorder)) | ((*points)[bi*4+3] & borderVertex)
+	for i := 0; i < len(simplified)/4; i++ {
+		ai := (simplified[i*4+3] + 1) % pn
+		bi := simplified[i*4+3]
+		simplified[i*4+3] = (points[ai*4+3] & (contourRegMask | areaBorder)) | (points[bi*4+3] & borderVertex)
 	}
+
+	return simplified
 }
 
 func calcAreaOfPolygon2D(verts []int, nverts int) int {
@@ -972,22 +967,23 @@ func inConeIntContour(i, n int, verts []int, pj []int) bool {
 	return !(leftOnInt(pi, pj, pi1) && leftOnInt(pj, pi, pin1))
 }
 
-func removeDegenerateSegments(simplified *[]int) {
-	npts := len(*simplified) / 4
+func removeDegenerateSegments(simplified []int) []int {
+	npts := len(simplified) / 4
 	for i := 0; i < npts; i++ {
 		ni := next(i, npts)
 
-		if vequalInt((*simplified)[i*4:], (*simplified)[ni*4:]) {
-			for j := i; j < len(*simplified)/4-1; j++ {
-				(*simplified)[j*4+0] = (*simplified)[(j+1)*4+0]
-				(*simplified)[j*4+1] = (*simplified)[(j+1)*4+1]
-				(*simplified)[j*4+2] = (*simplified)[(j+1)*4+2]
-				(*simplified)[j*4+3] = (*simplified)[(j+1)*4+3]
+		if vequalInt(simplified[i*4:], simplified[ni*4:]) {
+			for j := i; j < len(simplified)/4-1; j++ {
+				simplified[j*4+0] = simplified[(j+1)*4+0]
+				simplified[j*4+1] = simplified[(j+1)*4+1]
+				simplified[j*4+2] = simplified[(j+1)*4+2]
+				simplified[j*4+3] = simplified[(j+1)*4+3]
 			}
-			*simplified = (*simplified)[:len(*simplified)-4]
+			simplified = simplified[:len(simplified)-4]
 			npts--
 		}
 	}
+	return simplified
 }
 
 func mergeContours(ca, cb *Contour, ia, ib int) bool {
@@ -1122,14 +1118,15 @@ func mergeRegionHoles(ctx *Context, region *ContourRegion) {
 	}
 }
 
-// BuildContours builds a contour set from a compact heightfield.
-func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxEdgeLen int, cset *ContourSet, buildFlags int) bool {
+// BuildContours builds and returns a contour set from a compact heightfield.
+func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxEdgeLen int, buildFlags int) *ContourSet {
 	w := chf.Width
 	h := chf.Height
 	borderSize := chf.BorderSize
 
 	defer ctx.ScopedTimer(TimerBuildContours)()
 
+	cset := &ContourSet{}
 	cset.Bmin = chf.Bmin
 	cset.Bmax = chf.Bmax
 	if borderSize > 0 {
@@ -1204,12 +1201,12 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				simplified = simplified[:0]
 
 				ctx.StartTimer(TimerBuildContoursTrace)
-				walkContour(x, y, i, chf, flags, &verts)
+				verts = walkContour(x, y, i, chf, flags, verts)
 				ctx.StopTimer(TimerBuildContoursTrace)
 
 				ctx.StartTimer(TimerBuildContoursSimplify)
-				simplifyContour(&verts, &simplified, maxError, maxEdgeLen, buildFlags)
-				removeDegenerateSegments(&simplified)
+				simplified = simplifyContour(verts, maxError, maxEdgeLen, buildFlags)
+				simplified = removeDegenerateSegments(simplified)
 				ctx.StopTimer(TimerBuildContoursSimplify)
 
 				if len(simplified)/4 >= 3 {
@@ -1316,5 +1313,5 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 		}
 	}
 
-	return true
+	return cset
 }

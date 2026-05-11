@@ -1,7 +1,6 @@
 // Package debug_utils implements debug visualization utilities for recastnavigation.
 package debug_utils
 
-// DrawPrimitives represents the primitive type to draw.
 type DrawPrimitives int
 
 const (
@@ -19,9 +18,9 @@ type DebugDraw interface {
 	DepthMask(state bool)
 	Texture(state bool)
 	Begin(prim DrawPrimitives, size float32)
-	VertexPosColor(pos []float32, color uint32)
+	VertexPosColor(pos [3]float32, color uint32)
 	VertexXYZColor(x, y, z float32, color uint32)
-	VertexPosColorUV(pos []float32, color uint32, uv []float32)
+	VertexPosColorUV(pos [3]float32, color uint32, uv [2]float32)
 	VertexXYZColorUV(x, y, z float32, color uint32, u, v float32)
 	End()
 	AreaToCol(area uint32) uint32
@@ -54,13 +53,15 @@ func IntToCol(i, a int) uint32 {
 }
 
 // IntToColFloat converts an integer index to float color.
-func IntToColFloat(i int, col []float32) {
+func IntToColFloat(i int) [3]float32 {
 	r := bit(i, 0) + bit(i, 3)*2 + 1
 	g := bit(i, 1) + bit(i, 4)*2 + 1
 	b := bit(i, 2) + bit(i, 5)*2 + 1
-	col[0] = 1 - float32(r*63)/255.0
-	col[1] = 1 - float32(g*63)/255.0
-	col[2] = 1 - float32(b*63)/255.0
+	return [3]float32{
+		1 - float32(r*63)/255.0,
+		1 - float32(g*63)/255.0,
+		1 - float32(b*63)/255.0,
+	}
 }
 
 // MultCol multiplies the RGB channels of a color by a factor.
@@ -101,13 +102,15 @@ func TransCol(c uint32, a uint32) uint32 {
 }
 
 // CalcBoxColors calculates face colors for a box.
-func CalcBoxColors(colors []uint32, colTop, colSide uint32) {
-	colors[0] = MultCol(colTop, 250)
-	colors[1] = MultCol(colSide, 140)
-	colors[2] = MultCol(colSide, 165)
-	colors[3] = MultCol(colSide, 217)
-	colors[4] = MultCol(colSide, 165)
-	colors[5] = MultCol(colSide, 217)
+func CalcBoxColors(colTop, colSide uint32) [6]uint32 {
+	return [6]uint32{
+		MultCol(colTop, 250),
+		MultCol(colSide, 140),
+		MultCol(colSide, 165),
+		MultCol(colSide, 217),
+		MultCol(colSide, 165),
+		MultCol(colSide, 217),
+	}
 }
 
 // CylinderWire draws a cylinder wireframe.
@@ -391,33 +394,31 @@ func evalArc(x0, y0, z0, dx, dy, dz, h, u float32) (float32, float32, float32) {
 	return resX, resY, resZ
 }
 
-func vecCross(dest []float32, v1, v2 []float32) {
-	dest[0] = v1[1]*v2[2] - v1[2]*v2[1]
-	dest[1] = v1[2]*v2[0] - v1[0]*v2[2]
-	dest[2] = v1[0]*v2[1] - v1[1]*v2[0]
+func vecCross(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[1]*v2[2] - v1[2]*v2[1],
+		v1[2]*v2[0] - v1[0]*v2[2],
+		v1[0]*v2[1] - v1[1]*v2[0],
+	}
 }
 
-func vecNormalize(v []float32) {
+func vecNormalize(v [3]float32) [3]float32 {
 	d := 1.0 / sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])
-	v[0] *= d
-	v[1] *= d
-	v[2] *= d
+	return [3]float32{v[0] * d, v[1] * d, v[2] * d}
 }
 
-func vecSub(dest, v1, v2 []float32) {
-	dest[0] = v1[0] - v2[0]
-	dest[1] = v1[1] - v2[1]
-	dest[2] = v1[2] - v2[2]
+func vecSub(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]}
 }
 
-func vecDistSqr(v1, v2 []float32) float32 {
+func vecDistSqr(v1, v2 [3]float32) float32 {
 	x := v1[0] - v2[0]
 	y := v1[1] - v2[1]
 	z := v1[2] - v2[2]
 	return x*x + y*y + z*z
 }
 
-func appendArrowHead(dd DebugDraw, p, q []float32, s float32, col uint32) {
+func appendArrowHead(dd DebugDraw, p, q [3]float32, s float32, col uint32) {
 	const eps = 0.001
 	if dd == nil {
 		return
@@ -425,15 +426,13 @@ func appendArrowHead(dd DebugDraw, p, q []float32, s float32, col uint32) {
 	if vecDistSqr(p, q) < eps*eps {
 		return
 	}
-	az := make([]float32, 3)
-	ay := []float32{0, 1, 0}
-	ax := make([]float32, 3)
+	ay := [3]float32{0, 1, 0}
 
-	vecSub(az, q, p)
-	vecNormalize(az)
-	vecCross(ax, ay, az)
-	vecCross(ay, az, ax)
-	vecNormalize(ay)
+	az := vecSub(q, p)
+	az = vecNormalize(az)
+	ax := vecCross(ay, az)
+	ay = vecCross(az, ax)
+	ay = vecNormalize(ay)
 
 	dd.VertexPosColor(p, col)
 	dd.VertexXYZColor(p[0]+az[0]*s+ax[0]*s/3, p[1]+az[1]*s+ax[1]*s/3, p[2]+az[2]*s+ax[2]*s/3, col)
@@ -468,12 +467,12 @@ func AppendArc(dd DebugDraw, x0, y0, z0, x1, y1, z1, h, as0, as1 float32, col ui
 	if as0 > 0.001 {
 		px, py, pz = evalArc(x0, y0, z0, dx, dy, dz, length*h, pad)
 		qx, qy, qz := evalArc(x0, y0, z0, dx, dy, dz, length*h, pad+0.05)
-		appendArrowHead(dd, []float32{px, py, pz}, []float32{qx, qy, qz}, as0, col)
+		appendArrowHead(dd, [3]float32{px, py, pz}, [3]float32{qx, qy, qz}, as0, col)
 	}
 	if as1 > 0.001 {
 		px, py, pz = evalArc(x0, y0, z0, dx, dy, dz, length*h, 1-pad)
 		qx, qy, qz := evalArc(x0, y0, z0, dx, dy, dz, length*h, 1-(pad+0.05))
-		appendArrowHead(dd, []float32{px, py, pz}, []float32{qx, qy, qz}, as1, col)
+		appendArrowHead(dd, [3]float32{px, py, pz}, [3]float32{qx, qy, qz}, as1, col)
 	}
 }
 
@@ -485,8 +484,8 @@ func AppendArrow(dd DebugDraw, x0, y0, z0, x1, y1, z1, as0, as1 float32, col uin
 	dd.VertexXYZColor(x0, y0, z0, col)
 	dd.VertexXYZColor(x1, y1, z1, col)
 
-	p := []float32{x0, y0, z0}
-	q := []float32{x1, y1, z1}
+	p := [3]float32{x0, y0, z0}
+	q := [3]float32{x1, y1, z1}
 	if as0 > 0.001 {
 		appendArrowHead(dd, p, q, as0, col)
 	}
@@ -579,8 +578,8 @@ func (dl *DisplayList) Begin(prim DrawPrimitives, size float32) {
 	dl.primSize = size
 }
 
-// VertexPosColor records a vertex with position slice and color.
-func (dl *DisplayList) VertexPosColor(pos []float32, color uint32) {
+// VertexPosColor records a vertex with position array and color.
+func (dl *DisplayList) VertexPosColor(pos [3]float32, color uint32) {
 	dl.VertexXYZColor(pos[0], pos[1], pos[2], color)
 }
 
@@ -598,7 +597,7 @@ func (dl *DisplayList) VertexXYZColor(x, y, z float32, color uint32) {
 }
 
 // VertexPosColorUV records a vertex with UV (unused in display list).
-func (dl *DisplayList) VertexPosColorUV(pos []float32, color uint32, uv []float32) {
+func (dl *DisplayList) VertexPosColorUV(pos [3]float32, color uint32, uv [2]float32) {
 	dl.VertexXYZColor(pos[0], pos[1], pos[2], color)
 }
 
@@ -628,7 +627,8 @@ func (dl *DisplayList) Draw(dd DebugDraw) {
 	dd.DepthMask(dl.depthMask)
 	dd.Begin(dl.prim, dl.primSize)
 	for i := 0; i < dl.size; i++ {
-		dd.VertexPosColor(dl.pos[i*3:i*3+3], dl.color[i])
+		p := [3]float32{dl.pos[i*3], dl.pos[i*3+1], dl.pos[i*3+2]}
+		dd.VertexPosColor(p, dl.color[i])
 	}
 	dd.End()
 }

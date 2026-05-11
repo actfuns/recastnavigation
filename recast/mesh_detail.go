@@ -234,8 +234,8 @@ func getHeightData(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly i
 func buildPolyDetail(ctx *Context, in []float32, nin int,
 	sampleDist, sampleMaxError float32,
 	heightSearchRadius int, chf *CompactHeightfield,
-	hp *HeightPatch, verts []float32, nverts *int,
-	tris *[]int, edges *[]int, samples *[]int) bool {
+	hp *HeightPatch, verts []float32,
+	nvertsOut *int, trisOut, edgesOut, samplesOut *[]int) {
 
 	const maxVerts = 127
 	const maxTris = 255
@@ -244,7 +244,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 	hull := make([]int, maxVerts)
 	nhull := 0
 
-	*nverts = nin
+	nverts := nin
 
 	for i := 0; i < nin; i++ {
 		verts[i*3+0] = in[i*3+0]
@@ -252,13 +252,13 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 		verts[i*3+2] = in[i*3+2]
 	}
 
-	*edges = (*edges)[:0]
-	*tris = (*tris)[:0]
+	tris := make([]int, 0, 512)
+	edges := make([]int, 0, 64)
 
 	cs := chf.Cs
 	ics := 1.0 / cs
 
-	minExtent := polyMinExtent(verts, *nverts)
+	minExtent := polyMinExtent(verts, nverts)
 
 	if sampleDist > 0 {
 		for i, j := 0, nin-1; i < nin; j = i {
@@ -288,8 +288,8 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 			if nn >= maxVertsPerEdge {
 				nn = maxVertsPerEdge - 1
 			}
-			if *nverts+nn >= maxVerts {
-				nn = maxVerts - 1 - *nverts
+			if nverts+nn >= maxVerts {
+				nn = maxVerts - 1 - nverts
 			}
 
 			for k := 0; k <= nn; k++ {
@@ -313,7 +313,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 				maxd := float32(0)
 				maxi := -1
 				for m := a + 1; m < b; m++ {
-					dev := distancePtSeg(edge[m*3:m*3+3], va, vb)
+					dev := distancePtSeg(toV3(edge[m*3:]), toV3(va), toV3(vb))
 					if dev > maxd {
 						maxd = dev
 						maxi = m
@@ -334,37 +334,45 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 			nhull++
 			if swapped {
 				for k := nidx - 2; k > 0; k-- {
-					verts[*nverts*3+0] = edge[idx[k]*3+0]
-					verts[*nverts*3+1] = edge[idx[k]*3+1]
-					verts[*nverts*3+2] = edge[idx[k]*3+2]
-					hull[nhull] = *nverts
+					verts[nverts*3+0] = edge[idx[k]*3+0]
+					verts[nverts*3+1] = edge[idx[k]*3+1]
+					verts[nverts*3+2] = edge[idx[k]*3+2]
+					hull[nhull] = nverts
 					nhull++
-					*nverts++
+					nverts++
 				}
 			} else {
 				for k := 1; k < nidx-1; k++ {
-					verts[*nverts*3+0] = edge[idx[k]*3+0]
-					verts[*nverts*3+1] = edge[idx[k]*3+1]
-					verts[*nverts*3+2] = edge[idx[k]*3+2]
-					hull[nhull] = *nverts
+					verts[nverts*3+0] = edge[idx[k]*3+0]
+					verts[nverts*3+1] = edge[idx[k]*3+1]
+					verts[nverts*3+2] = edge[idx[k]*3+2]
+					hull[nhull] = nverts
 					nhull++
-					*nverts++
+					nverts++
 				}
 			}
 		}
 	}
 
 	if minExtent < sampleDist*2 {
-		triangulateHull(*nverts, verts, nhull, hull[:nhull], nin, tris)
-		setTriFlags(tris, nhull, hull[:nhull])
-		return true
+		triangulateHull(nverts, verts, nhull, hull[:nhull], nin, &tris)
+		setTriFlags(&tris, nhull, hull[:nhull])
+		*nvertsOut = nverts
+		*trisOut = tris
+		*edgesOut = edges
+		*samplesOut = nil
+		return
 	}
 
-	triangulateHull(*nverts, verts, nhull, hull[:nhull], nin, tris)
+	triangulateHull(nverts, verts, nhull, hull[:nhull], nin, &tris)
 
-	if len(*tris) == 0 {
-		ctx.Log(LogWarning, "buildPolyDetail: Could not triangulate polygon (%d verts).", *nverts)
-		return true
+	if len(tris) == 0 {
+		ctx.Log(LogWarning, "buildPolyDetail: Could not triangulate polygon (%d verts).", nverts)
+		*nvertsOut = nverts
+		*trisOut = tris
+		*edgesOut = edges
+		*samplesOut = nil
+		return
 	}
 
 	if sampleDist > 0 {
@@ -380,7 +388,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 		z0 := int(math.Floor(float64(bmin[2] / sampleDist)))
 		z1 := int(math.Ceil(float64(bmax[2] / sampleDist)))
 
-		*samples = (*samples)[:0]
+		samples := make([]int, 0, 512)
 		for z := z0; z < z1; z++ {
 			for x := x0; x < x1; x++ {
 				pt := [3]float32{
@@ -388,18 +396,18 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 					(bmax[1] + bmin[1]) * 0.5,
 					float32(z) * sampleDist,
 				}
-				if distToPoly(nin, in, pt[:]) > -sampleDist/2 {
+				if distToPoly(nin, in, pt) > -sampleDist/2 {
 					continue
 				}
-				*samples = append(*samples, x,
+				samples = append(samples, x,
 					int(getHeight(pt[0], pt[1], pt[2], cs, ics, chf.Ch, heightSearchRadius, hp)),
 					z, 0)
 			}
 		}
 
-		nsamples := len(*samples) / 4
+		nsamples := len(samples) / 4
 		for iter := 0; iter < nsamples; iter++ {
-			if *nverts >= maxVerts {
+			if nverts >= maxVerts {
 				break
 			}
 
@@ -408,7 +416,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 			besti := -1
 
 			for i := 0; i < nsamples; i++ {
-				s := (*samples)[i*4:]
+				s := samples[i*4:]
 				if s[3] != 0 {
 					continue
 				}
@@ -417,10 +425,10 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 					float32(s[1]) * chf.Ch,
 					float32(s[2])*sampleDist + getJitterY(i)*cs*0.1,
 				}
-				if len(*tris) == 0 {
+				if len(tris) == 0 {
 					continue
 				}
-				d := distToTriMesh(pt[:], verts, *tris, len(*tris)/4)
+				d := distToTriMesh(pt, verts, tris, len(tris)/4)
 				if d < 0 {
 					continue
 				}
@@ -435,29 +443,32 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 				break
 			}
 
-			(*samples)[besti*4+3] = 1
+			samples[besti*4+3] = 1
 
-			verts[*nverts*3+0] = bestpt[0]
-			verts[*nverts*3+1] = bestpt[1]
-			verts[*nverts*3+2] = bestpt[2]
-			*nverts++
+			verts[nverts*3+0] = bestpt[0]
+			verts[nverts*3+1] = bestpt[1]
+			verts[nverts*3+2] = bestpt[2]
+			nverts++
 
-			*edges = (*edges)[:0]
-			*tris = (*tris)[:0]
-			delaunayHull(*nverts, verts, nhull, hull[:nhull], tris, edges)
+			edges = edges[:0]
+			tris = tris[:0]
+			delaunayHull(nverts, verts, nhull, hull[:nhull], &tris, &edges)
 		}
+
+		*samplesOut = samples
 	}
 
-	const maxTrisConst = 255
-	ntris := len(*tris) / 4
-	if ntris > maxTrisConst {
-		*tris = (*tris)[:maxTrisConst*4]
-		ctx.Log(LogError, "BuildPolyMeshDetail: Shrinking triangle count from %d to max %d.", ntris, maxTrisConst)
+	ntris := len(tris) / 4
+	if ntris > maxTris {
+		tris = tris[:maxTris*4]
+		ctx.Log(LogError, "BuildPolyMeshDetail: Shrinking triangle count from %d to max %d.", ntris, maxTris)
 	}
 
-	setTriFlags(tris, nhull, hull[:nhull])
+	setTriFlags(&tris, nhull, hull[:nhull])
 
-	return true
+	*nvertsOut = nverts
+	*trisOut = tris
+	*edgesOut = edges
 }
 
 // BuildPolyMeshDetail builds the detail mesh for a polygon mesh.
@@ -558,13 +569,11 @@ func BuildPolyMeshDetail(ctx *Context, mesh *PolyMesh, chf *CompactHeightfield, 
 
 		getHeightData(ctx, chf, p, npoly, mesh.Verts, borderSize, hp, &arr, mesh.Regs[i])
 
-		nverts := 0
-		if !buildPolyDetail(ctx, poly, npoly,
+		var nverts int
+		buildPolyDetail(ctx, poly, npoly,
 			sampleDist, sampleMaxError,
 			heightSearchRadius, chf, hp,
-			verts, &nverts, &tris, &edges, &samples) {
-			return false
-		}
+			verts, &nverts, &tris, &edges, &samples)
 
 		for j := 0; j < nverts; j++ {
 			verts[j*3+0] += mesh.Bmin[0]

@@ -53,7 +53,6 @@ func (q *PathQueue) Init(maxPathSize int, maxSearchNodeCount int, nav NavMeshQue
 // Update updates path requests in the queue.
 func (q *PathQueue) Update(maxIters int) {
 	const maxKeepAlive = 2
-	iterCount := maxIters
 
 	for i := 0; i < pathQueueMaxQueue; i++ {
 		pq := &q.queue[q.queueHead%pathQueueMaxQueue]
@@ -64,8 +63,8 @@ func (q *PathQueue) Update(maxIters int) {
 			continue
 		}
 
-		// Handle completed request.
-		if pq.err == nil || pq.err != nil {
+		// Handle completed/failed request (terminal error, not "in progress").
+		if pq.err != nil && pq.err != detour.ErrInProgress {
 			pq.keepAlive++
 			if pq.keepAlive > maxKeepAlive {
 				pq.ref = 0
@@ -77,22 +76,17 @@ func (q *PathQueue) Update(maxIters int) {
 
 		// Handle query start.
 		if pq.err == nil {
-			pq.err = q.navquery.InitSlicedFindPath(pq.startRef, pq.endRef, pq.startPos, pq.endPos, pq.filter)
+			pq.err = q.navquery.FindPathSliced(pq.startRef, pq.endRef, pq.startPos, pq.endPos, pq.filter, 0)
 		}
 
 		// Handle query in progress.
 		if errors.Is(pq.err, detour.ErrInProgress) {
-			var iters int
-			pq.err = q.navquery.UpdateSlicedFindPath(iterCount, &iters)
-			iterCount -= iters
+			pq.err = q.navquery.UpdateSlicedPath(maxIters)
 		}
 
+		// Handle query complete.
 		if pq.err == nil {
-			pq.err = q.navquery.FinalizeSlicedFindPath(pq.path, &pq.npath, q.maxPathSize)
-		}
-
-		if iterCount <= 0 {
-			break
+			pq.npath, pq.err = q.navquery.GetPathFromSlicedPath(pq.path, q.maxPathSize)
 		}
 
 		q.queueHead++
@@ -100,7 +94,7 @@ func (q *PathQueue) Update(maxIters int) {
 }
 
 // Request submits a new pathfinding request.
-func (q *PathQueue) Request(startRef, endRef PolyRef, startPos, endPos *[3]float32, filter *QueryFilter) PathQueueRef {
+func (q *PathQueue) Request(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter) PathQueueRef {
 	// Find empty slot
 	slot := -1
 	for i := 0; i < pathQueueMaxQueue; i++ {
@@ -121,9 +115,9 @@ func (q *PathQueue) Request(startRef, endRef PolyRef, startPos, endPos *[3]float
 
 	pq := &q.queue[slot]
 	pq.ref = ref
-	pq.startPos = *startPos
+	pq.startPos = startPos
 	pq.startRef = startRef
-	pq.endPos = *endPos
+	pq.endPos = endPos
 	pq.endRef = endRef
 	pq.err = nil
 	pq.npath = 0
@@ -144,7 +138,7 @@ func (q *PathQueue) GetRequestErr(ref PathQueueRef) error {
 }
 
 // GetPathResult gets the result of a completed pathfinding request.
-func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, pathSize *int, maxPath int) error {
+func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, maxPath int) (int, error) {
 	for i := 0; i < pathQueueMaxQueue; i++ {
 		if q.queue[i].ref == ref {
 			pq := &q.queue[i]
@@ -155,14 +149,13 @@ func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, pathSize *in
 			// Copy path
 			n := recastMin(pq.npath, maxPath)
 			copy(path[:n], pq.path[:n])
-			*pathSize = n
 			if details {
-				return detour.ErrPartialResult
+				return n, detour.ErrPartialResult
 			}
-			return nil
+			return n, nil
 		}
 	}
-	return detour.ErrFailure
+	return 0, detour.ErrFailure
 }
 
 // GetNavQuery returns the navigation mesh query used by the path queue.

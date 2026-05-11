@@ -134,11 +134,10 @@ func AddSpan(ctx *Context, hf *Heightfield, x, z int, spanMin, spanMax uint16, a
 }
 
 // dividePoly divides a convex polygon of max 12 vertices into two convex polygons
-// across a separating axis.
+// across a separating axis. Returns the number of vertices in outVerts1 and outVerts2.
 func dividePoly(inVerts []float32, inVertsCount int,
-	outVerts1 []float32, outVerts1Count *int,
-	outVerts2 []float32, outVerts2Count *int,
-	axisOffset float32, axis Axis) {
+	outVerts1 []float32, outVerts2 []float32,
+	axisOffset float32, axis Axis) (int, int) {
 
 	// How far positive or negative away from the separating axis is each vertex.
 	inVertAxisDelta := make([]float32, inVertsCount)
@@ -183,27 +182,22 @@ func dividePoly(inVerts []float32, inVertsCount int,
 		}
 	}
 
-	*outVerts1Count = poly1Vert
-	*outVerts2Count = poly2Vert
+	return poly1Vert, poly2Vert
 }
 
 // rasterizeTri rasterizes a single triangle to the heightfield.
-func rasterizeTri(v0, v1, v2 *[3]float32, areaID uint8, hf *Heightfield,
-	hfBBMin, hfBBMax *[3]float32,
-	cellSize, inverseCellSize, inverseCellHeight float32,
-	flagMergeThreshold int) bool {
-
+func rasterizeTri(v0, v1, v2 [3]float32, areaID uint8, hf *Heightfield, hfBBMin, hfBBMax [3]float32, cellSize, inverseCellSize, inverseCellHeight float32, flagMergeThreshold int) bool {
 	// Calculate the bounding box of the triangle.
-	triBBMin := *v0
-	triBBMin = Vmin(triBBMin, *v1)
-	triBBMin = Vmin(triBBMin, *v2)
+	triBBMin := v0
+	triBBMin = Vmin(triBBMin, v1)
+	triBBMin = Vmin(triBBMin, v2)
 
-	triBBMax := *v0
-	triBBMax = Vmax(triBBMax, *v1)
-	triBBMax = Vmax(triBBMax, *v2)
+	triBBMax := v0
+	triBBMax = Vmax(triBBMax, v1)
+	triBBMax = Vmax(triBBMax, v2)
 
 	// If the triangle does not touch the bounding box of the heightfield, skip the triangle.
-	if !OverlapBounds(&triBBMin, &triBBMax, hfBBMin, hfBBMax) {
+	if !OverlapBounds(triBBMin, triBBMax, hfBBMin, hfBBMax) {
 		return true
 	}
 
@@ -235,7 +229,7 @@ func rasterizeTri(v0, v1, v2 *[3]float32, areaID uint8, hf *Heightfield,
 	for z := z0; z <= z1; z++ {
 		// Clip polygon to row. Store the remaining polygon as well
 		cellZ := hfBBMin[2] + float32(z)*cellSize
-		dividePoly(in, nvIn, inRow, &nvRow, p1, &nvIn, cellZ+cellSize, AxisZ)
+		nvRow, nvIn = dividePoly(in, nvIn, inRow, p1, cellZ+cellSize, AxisZ)
 		in, p1 = p1, in
 
 		if nvRow < 3 {
@@ -270,7 +264,7 @@ func rasterizeTri(v0, v1, v2 *[3]float32, areaID uint8, hf *Heightfield,
 		for x := x0; x <= x1; x++ {
 			// Clip polygon to column. store the remaining polygon as well
 			cx := hfBBMin[0] + float32(x)*cellSize
-			dividePoly(inRow, nv2, p1, &nv, p2, &nv2, cx+cellSize, AxisX)
+			nv, nv2 = dividePoly(inRow, nv2, p1, p2, cx+cellSize, AxisX)
 			inRow, p2 = p2, inRow
 
 			if nv < 3 {
@@ -324,7 +318,7 @@ func rasterizeTri(v0, v1, v2 *[3]float32, areaID uint8, hf *Heightfield,
 }
 
 // RasterizeTriangle rasterizes a single triangle into the specified heightfield.
-func RasterizeTriangle(ctx *Context, v0, v1, v2 *[3]float32, areaID uint8, hf *Heightfield, flagMergeThreshold int) (bool, error) {
+func RasterizeTriangle(ctx *Context, v0, v1, v2 [3]float32, areaID uint8, hf *Heightfield, flagMergeThreshold int) (bool, error) {
 	if ctx == nil {
 		return false, fmt.Errorf("recast: ctx must not be nil")
 	}
@@ -334,7 +328,7 @@ func RasterizeTriangle(ctx *Context, v0, v1, v2 *[3]float32, areaID uint8, hf *H
 	// Rasterize the single triangle.
 	inverseCellSize := 1.0 / hf.Cs
 	inverseCellHeight := 1.0 / hf.Ch
-	if !rasterizeTri(v0, v1, v2, areaID, hf, &hf.Bmin, &hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
+	if !rasterizeTri(v0, v1, v2, areaID, hf, hf.Bmin, hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
 		ctx.Log(LogError, "RasterizeTriangle: Out of memory.")
 		return false, nil
 	}
@@ -354,10 +348,10 @@ func RasterizeTriangles(ctx *Context, verts []float32, numVerts int, tris []int,
 	inverseCellSize := 1.0 / hf.Cs
 	inverseCellHeight := 1.0 / hf.Ch
 	for triIndex := 0; triIndex < numTris; triIndex++ {
-		v0 := &[3]float32{verts[tris[triIndex*3+0]*3], verts[tris[triIndex*3+0]*3+1], verts[tris[triIndex*3+0]*3+2]}
-		v1 := &[3]float32{verts[tris[triIndex*3+1]*3], verts[tris[triIndex*3+1]*3+1], verts[tris[triIndex*3+1]*3+2]}
-		v2 := &[3]float32{verts[tris[triIndex*3+2]*3], verts[tris[triIndex*3+2]*3+1], verts[tris[triIndex*3+2]*3+2]}
-		if !rasterizeTri(v0, v1, v2, triAreaIDs[triIndex], hf, &hf.Bmin, &hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
+		v0 := [3]float32{verts[tris[triIndex*3+0]*3], verts[tris[triIndex*3+0]*3+1], verts[tris[triIndex*3+0]*3+2]}
+		v1 := [3]float32{verts[tris[triIndex*3+1]*3], verts[tris[triIndex*3+1]*3+1], verts[tris[triIndex*3+1]*3+2]}
+		v2 := [3]float32{verts[tris[triIndex*3+2]*3], verts[tris[triIndex*3+2]*3+1], verts[tris[triIndex*3+2]*3+2]}
+		if !rasterizeTri(v0, v1, v2, triAreaIDs[triIndex], hf, hf.Bmin, hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
 			ctx.Log(LogError, "RasterizeTriangles: Out of memory.")
 			return false, nil
 		}
@@ -378,10 +372,10 @@ func RasterizeTrianglesUShort(ctx *Context, verts []float32, numVerts int, tris 
 	inverseCellSize := 1.0 / hf.Cs
 	inverseCellHeight := 1.0 / hf.Ch
 	for triIndex := 0; triIndex < numTris; triIndex++ {
-		v0 := &[3]float32{verts[tris[triIndex*3+0]*3], verts[tris[triIndex*3+0]*3+1], verts[tris[triIndex*3+0]*3+2]}
-		v1 := &[3]float32{verts[tris[triIndex*3+1]*3], verts[tris[triIndex*3+1]*3+1], verts[tris[triIndex*3+1]*3+2]}
-		v2 := &[3]float32{verts[tris[triIndex*3+2]*3], verts[tris[triIndex*3+2]*3+1], verts[tris[triIndex*3+2]*3+2]}
-		if !rasterizeTri(v0, v1, v2, triAreaIDs[triIndex], hf, &hf.Bmin, &hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
+		v0 := [3]float32{verts[tris[triIndex*3+0]*3], verts[tris[triIndex*3+0]*3+1], verts[tris[triIndex*3+0]*3+2]}
+		v1 := [3]float32{verts[tris[triIndex*3+1]*3], verts[tris[triIndex*3+1]*3+1], verts[tris[triIndex*3+1]*3+2]}
+		v2 := [3]float32{verts[tris[triIndex*3+2]*3], verts[tris[triIndex*3+2]*3+1], verts[tris[triIndex*3+2]*3+2]}
+		if !rasterizeTri(v0, v1, v2, triAreaIDs[triIndex], hf, hf.Bmin, hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
 			ctx.Log(LogError, "RasterizeTriangles: Out of memory.")
 			return false, nil
 		}
@@ -402,10 +396,10 @@ func RasterizeTrianglesVerts(ctx *Context, verts []float32, triAreaIDs []uint8, 
 	inverseCellSize := 1.0 / hf.Cs
 	inverseCellHeight := 1.0 / hf.Ch
 	for triIndex := 0; triIndex < numTris; triIndex++ {
-		v0 := &[3]float32{verts[(triIndex*3+0)*3], verts[(triIndex*3+0)*3+1], verts[(triIndex*3+0)*3+2]}
-		v1 := &[3]float32{verts[(triIndex*3+1)*3], verts[(triIndex*3+1)*3+1], verts[(triIndex*3+1)*3+2]}
-		v2 := &[3]float32{verts[(triIndex*3+2)*3], verts[(triIndex*3+2)*3+1], verts[(triIndex*3+2)*3+2]}
-		if !rasterizeTri(v0, v1, v2, triAreaIDs[triIndex], hf, &hf.Bmin, &hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
+		v0 := [3]float32{verts[(triIndex*3+0)*3], verts[(triIndex*3+0)*3+1], verts[(triIndex*3+0)*3+2]}
+		v1 := [3]float32{verts[(triIndex*3+1)*3], verts[(triIndex*3+1)*3+1], verts[(triIndex*3+1)*3+2]}
+		v2 := [3]float32{verts[(triIndex*3+2)*3], verts[(triIndex*3+2)*3+1], verts[(triIndex*3+2)*3+2]}
+		if !rasterizeTri(v0, v1, v2, triAreaIDs[triIndex], hf, hf.Bmin, hf.Bmax, hf.Cs, inverseCellSize, inverseCellHeight, flagMergeThreshold) {
 			ctx.Log(LogError, "RasterizeTriangles: Out of memory.")
 			return false, nil
 		}

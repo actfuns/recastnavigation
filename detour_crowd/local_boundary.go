@@ -1,9 +1,5 @@
 package detour_crowd
 
-import (
-	"github.com/actfuns/recastnavigation/recast"
-)
-
 // LocalBoundary stores local boundary data for an agent.
 type LocalBoundary struct {
 	center [3]float32
@@ -61,7 +57,7 @@ func (b *LocalBoundary) addSegment(dist float32, s *[6]float32) {
 			i++
 		}
 		tgt := i + 1
-		n := recast.Min(b.nsegs-i, maxLocalSegs-tgt)
+		n := recastMin(b.nsegs-i, maxLocalSegs-tgt)
 		if n > 0 {
 			copy(b.segs[tgt:tgt+n], b.segs[i:i+n])
 		}
@@ -77,7 +73,7 @@ func (b *LocalBoundary) addSegment(dist float32, s *[6]float32) {
 }
 
 // Update updates the local boundary using the current position and navigation mesh query.
-func (b *LocalBoundary) Update(ref PolyRef, pos *[3]float32, collisionQueryRange float32,
+func (b *LocalBoundary) Update(ref PolyRef, pos [3]float32, collisionQueryRange float32,
 	navquery NavMeshQueryInterface, filter *QueryFilter) {
 
 	if ref == 0 {
@@ -87,29 +83,26 @@ func (b *LocalBoundary) Update(ref PolyRef, pos *[3]float32, collisionQueryRange
 		return
 	}
 
-	b.center = *pos
+	b.center = pos
 
 	// First query non-overlapping polygons.
-	navquery.FindLocalNeighbourhood(ref, *pos, collisionQueryRange,
-		filter, b.polys[:], nil, &b.npolys, maxLocalPolys)
+	var nresult int
+	nresult, _ = navquery.FindPolysAroundCircle(ref, pos, collisionQueryRange,
+		filter, b.polys[:], nil, nil, maxLocalPolys)
+	b.npolys = nresult
 
 	// Secondly, store all polygon edges.
 	b.nsegs = 0
 	maxSegsPerPoly := recastVerstsPerPolygon * 3
-	segs := make([]float32, maxSegsPerPoly*6)
-	var nsegs int
+	segs := make([]NeighbourSeg, maxSegsPerPoly)
 
 	for j := 0; j < b.npolys; j++ {
-		nsegs = 0
-		navquery.GetPolyWallSegments(b.polys[j], filter, segs, nil, &nsegs, maxSegsPerPoly)
+		nsegs, _ := navquery.GetPolyWallSegments(b.polys[j], filter, segs, maxSegsPerPoly)
 		for k := 0; k < nsegs; k++ {
-			s := segs[k*6 : k*6+6]
+			sArr := segs[k].Seg
 			// Skip too distant segments.
-			var tseg float32
-			var sArr [6]float32
-			copy(sArr[:], s)
-			distSqr := recastDistancePtSegSqr2D(pos, &[3]float32{sArr[0], sArr[1], sArr[2]}, &[3]float32{sArr[3], sArr[4], sArr[5]}, &tseg)
-			if distSqr > recast.Sqr(collisionQueryRange) {
+			distSqr, _ := recastDistancePtSegSqr2D(pos, [3]float32{sArr[0], sArr[1], sArr[2]}, [3]float32{sArr[3], sArr[4], sArr[5]})
+			if distSqr > collisionQueryRange*collisionQueryRange {
 				continue
 			}
 			b.addSegment(distSqr, &sArr)
@@ -154,22 +147,22 @@ const mathMaxFloat32 = float32(^uint32(0) >> 1)
 // Placeholder constants - these should be imported from recast
 const recastVerstsPerPolygon = 6
 
-func recastDistancePtSegSqr2D(pt, p, q *[3]float32, t *float32) float32 {
+func recastDistancePtSegSqr2D(pt, p, q [3]float32) (float32, float32) {
 	pqx := q[0] - p[0]
 	pqz := q[2] - p[2]
 	dx := pt[0] - p[0]
 	dz := pt[2] - p[2]
 	d := pqx*pqx + pqz*pqz
-	*t = pqx*dx + pqz*dz
+	t := float32(0)
 	if d > 0 {
-		*t /= d
+		t = (pqx*dx + pqz*dz) / d
 	}
-	if *t < 0 {
-		*t = 0
-	} else if *t > 1 {
-		*t = 1
+	if t < 0 {
+		t = 0
+	} else if t > 1 {
+		t = 1
 	}
-	dx = p[0] + *t*pqx - pt[0]
-	dz = p[2] + *t*pqz - pt[2]
-	return dx*dx + dz*dz
+	dx = p[0] + t*pqx - pt[0]
+	dz = p[2] + t*pqz - pt[2]
+	return dx*dx + dz*dz, t
 }

@@ -227,40 +227,35 @@ func (tc *TileCache) GetTileByRef(ref CompressedTileRef) *CompressedTile {
 }
 
 // AddTile adds a tile to the cache.
-func (tc *TileCache) AddTile(data []uint8, dataSize int, flags uint8, result *CompressedTileRef) error {
+func (tc *TileCache) AddTile(data []uint8, dataSize int, flags uint8) (CompressedTileRef, error) {
 	if len(data) < TileCacheLayerHeaderSize() {
-		return detour.ErrInvalidParam
+		return 0, detour.ErrInvalidParam
 	}
 
-	// Use the data directly as a header.
 	header := (*TileCacheLayerHeader)(unsafe.Pointer(&data[0]))
 
 	if header.Magic != TileCacheMagic {
-		return detour.ErrWrongMagic
+		return 0, detour.ErrWrongMagic
 	}
 	if header.Version != TileCacheVersion {
-		return detour.ErrWrongVersion
+		return 0, detour.ErrWrongVersion
 	}
 
-	// Make sure the location is free.
 	if tc.GetTileAt(int(header.Tx), int(header.Ty), int(header.Tlayer)) != nil {
-		return detour.ErrFailure
+		return 0, detour.ErrFailure
 	}
 
-	// Allocate a tile.
 	tile := tc.nextFreeTile
 	if tile == nil {
-		return detour.ErrOutOfMemory
+		return 0, detour.ErrOutOfMemory
 	}
 	tc.nextFreeTile = tile.Next
 	tile.Next = nil
 
-	// Insert tile into the position lut.
 	h := computeTileHash(int(header.Tx), int(header.Ty), tc.tileLutMask)
 	tile.Next = tc.posLookup[h]
 	tc.posLookup[h] = tile
 
-	// Init tile.
 	headerSize := TileCacheLayerHeaderSize()
 	tile.Header = header
 	tile.Data = data
@@ -269,29 +264,24 @@ func (tc *TileCache) AddTile(data []uint8, dataSize int, flags uint8, result *Co
 	tile.CompressedSize = dataSize - headerSize
 	tile.Flags = uint32(flags)
 
-	if result != nil {
-		*result = tc.GetTileRef(tile)
-	}
-
-	return nil
+	return tc.GetTileRef(tile), nil
 }
 
 // RemoveTile removes a tile from the cache.
-func (tc *TileCache) RemoveTile(ref CompressedTileRef, data *[]uint8, dataSize *int) error {
+func (tc *TileCache) RemoveTile(ref CompressedTileRef) ([]uint8, int, error) {
 	if ref == 0 {
-		return detour.ErrInvalidParam
+		return nil, 0, detour.ErrInvalidParam
 	}
 	tileIndex := tc.decodeTileIdTile(ref)
 	tileSalt := tc.decodeTileIdSalt(ref)
 	if int(tileIndex) >= int(tc.params.MaxTiles) {
-		return detour.ErrInvalidParam
+		return nil, 0, detour.ErrInvalidParam
 	}
 	tile := &tc.tiles[tileIndex]
 	if tile.Salt != tileSalt {
-		return detour.ErrInvalidParam
+		return nil, 0, detour.ErrInvalidParam
 	}
 
-	// Remove tile from hash lookup.
 	h := computeTileHash(int(tile.Header.Tx), int(tile.Header.Ty), tc.tileLutMask)
 	var prev *CompressedTile
 	cur := tc.posLookup[h]
@@ -308,23 +298,16 @@ func (tc *TileCache) RemoveTile(ref CompressedTileRef, data *[]uint8, dataSize *
 		cur = cur.Next
 	}
 
-	// Reset tile.
+	var data []uint8
+	var dataSize int
 	if tile.Flags&CompressedTileFreeData != 0 {
 		tile.Data = nil
 		tile.DataSize = 0
-		if data != nil {
-			*data = nil
-		}
-		if dataSize != nil {
-			*dataSize = 0
-		}
+		data = nil
+		dataSize = 0
 	} else {
-		if data != nil {
-			*data = tile.Data
-		}
-		if dataSize != nil {
-			*dataSize = tile.DataSize
-		}
+		data = tile.Data
+		dataSize = tile.DataSize
 	}
 
 	tile.Header = nil
@@ -334,38 +317,35 @@ func (tc *TileCache) RemoveTile(ref CompressedTileRef, data *[]uint8, dataSize *
 	tile.CompressedSize = 0
 	tile.Flags = 0
 
-	// Update salt, should never be zero.
 	tile.Salt = (tile.Salt + 1) & ((1 << tc.saltBits) - 1)
 	if tile.Salt == 0 {
 		tile.Salt++
 	}
 
-	// Add to free list.
 	tile.Next = tc.nextFreeTile
 	tc.nextFreeTile = tile
 
-	return nil
+	return data, dataSize, nil
 }
 
 // AddObstacle adds a cylindrical obstacle.
-func (tc *TileCache) AddObstacle(pos *[3]float32, radius, height float32, result *ObstacleRef) error {
+func (tc *TileCache) AddObstacle(pos [3]float32, radius, height float32) (ObstacleRef, error) {
 	if tc.nreqs >= maxRequests {
-		return detour.ErrBufferTooSmall
+		return 0, detour.ErrBufferTooSmall
 	}
 
 	ob := tc.nextFreeObstacle
 	if ob == nil {
-		return detour.ErrOutOfMemory
+		return 0, detour.ErrOutOfMemory
 	}
 	tc.nextFreeObstacle = ob.Next
 	ob.Next = nil
 
 	salt := ob.Salt
-	// Reset obstacle struct (zero out via assignment)
 	*ob = TileCacheObstacle{}
 	ob.Salt = salt
 	ob.State = ObstacleProcessing
-	ob.SetCylinder(*pos, radius, height)
+	ob.SetCylinder(pos, radius, height)
 
 	req := &tc.reqs[tc.nreqs]
 	tc.nreqs++
@@ -373,22 +353,18 @@ func (tc *TileCache) AddObstacle(pos *[3]float32, radius, height float32, result
 	req.action = RequestAdd
 	req.ref = tc.GetObstacleRef(ob)
 
-	if result != nil {
-		*result = req.ref
-	}
-
-	return nil
+	return req.ref, nil
 }
 
 // AddBoxObstacle adds an axis-aligned box obstacle.
-func (tc *TileCache) AddBoxObstacle(bmin, bmax *[3]float32, result *ObstacleRef) error {
+func (tc *TileCache) AddBoxObstacle(bmin, bmax [3]float32) (ObstacleRef, error) {
 	if tc.nreqs >= maxRequests {
-		return detour.ErrBufferTooSmall
+		return 0, detour.ErrBufferTooSmall
 	}
 
 	ob := tc.nextFreeObstacle
 	if ob == nil {
-		return detour.ErrOutOfMemory
+		return 0, detour.ErrOutOfMemory
 	}
 	tc.nextFreeObstacle = ob.Next
 	ob.Next = nil
@@ -397,7 +373,7 @@ func (tc *TileCache) AddBoxObstacle(bmin, bmax *[3]float32, result *ObstacleRef)
 	*ob = TileCacheObstacle{}
 	ob.Salt = salt
 	ob.State = ObstacleProcessing
-	ob.SetBox(*bmin, *bmax)
+	ob.SetBox(bmin, bmax)
 
 	req := &tc.reqs[tc.nreqs]
 	tc.nreqs++
@@ -405,22 +381,18 @@ func (tc *TileCache) AddBoxObstacle(bmin, bmax *[3]float32, result *ObstacleRef)
 	req.action = RequestAdd
 	req.ref = tc.GetObstacleRef(ob)
 
-	if result != nil {
-		*result = req.ref
-	}
-
-	return nil
+	return req.ref, nil
 }
 
 // AddBoxObstacleRot adds an oriented box obstacle with Y rotation.
-func (tc *TileCache) AddBoxObstacleRot(center, halfExtents *[3]float32, yRadians float32, result *ObstacleRef) error {
+func (tc *TileCache) AddBoxObstacleRot(center, halfExtents [3]float32, yRadians float32) (ObstacleRef, error) {
 	if tc.nreqs >= maxRequests {
-		return detour.ErrBufferTooSmall
+		return 0, detour.ErrBufferTooSmall
 	}
 
 	ob := tc.nextFreeObstacle
 	if ob == nil {
-		return detour.ErrOutOfMemory
+		return 0, detour.ErrOutOfMemory
 	}
 	tc.nextFreeObstacle = ob.Next
 	ob.Next = nil
@@ -430,8 +402,8 @@ func (tc *TileCache) AddBoxObstacleRot(center, halfExtents *[3]float32, yRadians
 	ob.Salt = salt
 	ob.State = ObstacleProcessing
 	ob.Type = ObstacleTypeOrientedBox
-	ob.orientedBox.Center = *center
-	ob.orientedBox.HalfExtents = *halfExtents
+	ob.orientedBox.Center = center
+	ob.orientedBox.HalfExtents = halfExtents
 
 	coshalf := float32(math.Cos(float64(0.5 * yRadians)))
 	sinhalf := float32(math.Sin(float64(-0.5 * yRadians)))
@@ -444,11 +416,7 @@ func (tc *TileCache) AddBoxObstacleRot(center, halfExtents *[3]float32, yRadians
 	req.action = RequestAdd
 	req.ref = tc.GetObstacleRef(ob)
 
-	if result != nil {
-		*result = req.ref
-	}
-
-	return nil
+	return req.ref, nil
 }
 
 // RemoveObstacle removes an obstacle by reference.
@@ -470,7 +438,7 @@ func (tc *TileCache) RemoveObstacle(ref ObstacleRef) error {
 }
 
 // QueryTiles queries tiles overlapping the given bounding box.
-func (tc *TileCache) QueryTiles(bmin, bmax *[3]float32, results []CompressedTileRef, resultCount *int, maxResults int) error {
+func (tc *TileCache) QueryTiles(bmin, bmax [3]float32, results []CompressedTileRef, maxResults int) (int, error) {
 	const maxTiles = 32
 	tiles := make([]CompressedTileRef, maxTiles)
 
@@ -487,10 +455,9 @@ func (tc *TileCache) QueryTiles(bmin, bmax *[3]float32, results []CompressedTile
 			ntiles := tc.GetTilesAt(tx, ty, tiles, maxTiles)
 			for i := 0; i < ntiles; i++ {
 				tile := &tc.tiles[tc.decodeTileIdTile(tiles[i])]
-				var tbmin, tbmax [3]float32
-				tc.CalcTightTileBounds(tile.Header, &tbmin, &tbmax)
+				tbmin, tbmax := tc.CalcTightTileBounds(tile.Header)
 
-				if overlapBounds(bmin, bmax, &tbmin, &tbmax) {
+				if overlapBounds(bmin, bmax, tbmin, tbmax) {
 					if n < maxResults {
 						results[n] = tiles[i]
 						n++
@@ -500,12 +467,11 @@ func (tc *TileCache) QueryTiles(bmin, bmax *[3]float32, results []CompressedTile
 		}
 	}
 
-	*resultCount = n
-	return nil
+	return n, nil
 }
 
 // Update processes pending obstacle requests and rebuilds affected tiles.
-func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface, upToDate *bool) error {
+func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface) (bool, error) {
 	if tc.nupdate == 0 {
 		// Process requests.
 		for i := 0; i < tc.nreqs; i++ {
@@ -523,14 +489,10 @@ func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface, upToDate *bool
 
 			switch req.action {
 			case RequestAdd:
-				// Find touched tiles.
-				var bmin, bmax [3]float32
-				tc.GetObstacleBounds(ob, &bmin, &bmax)
+				bmin, bmax := tc.GetObstacleBounds(ob)
 
-				var ntouched int
-				tc.QueryTiles(&bmin, &bmax, ob.Touched[:], &ntouched, MaxTouchedTiles)
+				ntouched, _ := tc.QueryTiles(bmin, bmax, ob.Touched[:], MaxTouchedTiles)
 				ob.NTouched = uint8(ntouched)
-				// Add tiles to update list.
 				ob.NPending = 0
 				for j := 0; j < int(ob.NTouched); j++ {
 					if tc.nupdate < maxUpdate {
@@ -543,9 +505,7 @@ func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface, upToDate *bool
 					}
 				}
 			case RequestRemove:
-				// Prepare to remove obstacle.
 				ob.State = ObstacleRemoving
-				// Add tiles to update list.
 				ob.NPending = 0
 				for j := 0; j < int(ob.NTouched); j++ {
 					if tc.nupdate < maxUpdate {
@@ -605,11 +565,7 @@ func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface, upToDate *bool
 		}
 	}
 
-	if upToDate != nil {
-		*upToDate = tc.nupdate == 0 && tc.nreqs == 0
-	}
-
-	return err
+	return tc.nupdate == 0 && tc.nreqs == 0, err
 }
 
 // BuildNavMeshTilesAt builds all tiles at the given coordinates.
@@ -659,14 +615,14 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInte
 		if containsRef(ob.Touched[:int(ob.NTouched)], ref) {
 			switch ob.Type {
 			case ObstacleTypeCylinder:
-				MarkCylinderArea(layer, &tile.Header.Bmin, tc.params.Cs, tc.params.Ch,
-					&ob.cylinder.Pos, ob.cylinder.Radius, ob.cylinder.Height, 0)
+				MarkCylinderArea(layer, tile.Header.Bmin, tc.params.Cs, tc.params.Ch,
+					ob.cylinder.Pos, ob.cylinder.Radius, ob.cylinder.Height, 0)
 			case ObstacleTypeBox:
-				MarkBoxArea(layer, &tile.Header.Bmin, tc.params.Cs, tc.params.Ch,
-					&ob.box.Bmin, &ob.box.Bmax, 0)
+				MarkBoxArea(layer, tile.Header.Bmin, tc.params.Cs, tc.params.Ch,
+					ob.box.Bmin, ob.box.Bmax, 0)
 			case ObstacleTypeOrientedBox:
-				MarkBoxAreaOriented(layer, &tile.Header.Bmin, tc.params.Cs, tc.params.Ch,
-					&ob.orientedBox.Center, &ob.orientedBox.HalfExtents, &ob.orientedBox.RotAux, 0)
+				MarkBoxAreaOriented(layer, tile.Header.Bmin, tc.params.Cs, tc.params.Ch,
+					ob.orientedBox.Center, ob.orientedBox.HalfExtents, ob.orientedBox.RotAux, 0)
 			}
 		}
 	}
@@ -677,28 +633,20 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInte
 		return err
 	}
 
-	lcset := AllocTileCacheContourSet(tc.talloc)
-	if lcset == nil {
-		return detour.ErrOutOfMemory
-	}
-	err = BuildTileCacheContours(tc.talloc, layer, walkableClimbVx,
-		tc.params.MaxSimplificationError, lcset)
+	lcset, err := BuildTileCacheContours(tc.talloc, layer, walkableClimbVx,
+		tc.params.MaxSimplificationError)
 	if err != nil {
 		return err
 	}
 
-	lmesh := AllocTileCachePolyMesh(tc.talloc)
-	if lmesh == nil {
-		return detour.ErrOutOfMemory
-	}
-	err = BuildTileCachePolyMesh(tc.talloc, lcset, lmesh)
+	lmesh, err := BuildTileCachePolyMesh(tc.talloc, lcset)
 	if err != nil {
 		return err
 	}
 
 	// Early out if the mesh tile is empty.
 	if lmesh.NPolys == 0 {
-		navmesh.RemoveTile(navmesh.GetTileRefAt(tile.Header.Tx, tile.Header.Ty, tile.Header.Tlayer), nil, nil)
+		navmesh.RemoveTile(navmesh.GetTileRefAt(tile.Header.Tx, tile.Header.Ty, tile.Header.Tlayer))
 		return nil
 	}
 
@@ -733,7 +681,7 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInte
 	}
 
 	// Remove existing tile.
-	navmesh.RemoveTile(navmesh.GetTileRefAt(tile.Header.Tx, tile.Header.Ty, tile.Header.Tlayer), nil, nil)
+	navmesh.RemoveTile(navmesh.GetTileRefAt(tile.Header.Tx, tile.Header.Ty, tile.Header.Tlayer))
 
 	// Add new tile, or leave the location empty.
 	err = navmesh.AddTile(navData, navDataSize, 0x01, nil)
@@ -745,18 +693,21 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInte
 }
 
 // CalcTightTileBounds calculates tight bounds for a tile.
-func (tc *TileCache) CalcTightTileBounds(header *TileCacheLayerHeader, bmin, bmax *[3]float32) {
+func (tc *TileCache) CalcTightTileBounds(header *TileCacheLayerHeader) ([3]float32, [3]float32) {
 	cs := tc.params.Cs
+	var bmin, bmax [3]float32
 	bmin[0] = header.Bmin[0] + float32(header.Minx)*cs
 	bmin[1] = header.Bmin[1]
 	bmin[2] = header.Bmin[2] + float32(header.Miny)*cs
 	bmax[0] = header.Bmin[0] + float32(header.Maxx+1)*cs
 	bmax[1] = header.Bmax[1]
 	bmax[2] = header.Bmin[2] + float32(header.Maxy+1)*cs
+	return bmin, bmax
 }
 
 // GetObstacleBounds calculates bounds for an obstacle.
-func (tc *TileCache) GetObstacleBounds(ob *TileCacheObstacle, bmin, bmax *[3]float32) {
+func (tc *TileCache) GetObstacleBounds(ob *TileCacheObstacle) ([3]float32, [3]float32) {
+	var bmin, bmax [3]float32
 	switch ob.Type {
 	case ObstacleTypeCylinder:
 		cl := &ob.cylinder
@@ -767,8 +718,8 @@ func (tc *TileCache) GetObstacleBounds(ob *TileCacheObstacle, bmin, bmax *[3]flo
 		bmax[1] = cl.Pos[1] + cl.Height
 		bmax[2] = cl.Pos[2] + cl.Radius
 	case ObstacleTypeBox:
-		*bmin = ob.box.Bmin
-		*bmax = ob.box.Bmax
+		bmin = ob.box.Bmin
+		bmax = ob.box.Bmax
 	case ObstacleTypeOrientedBox:
 		orientedBox := &ob.orientedBox
 		maxr := float32(1.41) * float32(math.Max(float64(orientedBox.HalfExtents[0]), float64(orientedBox.HalfExtents[2])))
@@ -779,6 +730,7 @@ func (tc *TileCache) GetObstacleBounds(ob *TileCacheObstacle, bmin, bmax *[3]flo
 		bmin[2] = orientedBox.Center[2] - maxr
 		bmax[2] = orientedBox.Center[2] + maxr
 	}
+	return bmin, bmax
 }
 
 // ID encoding/decoding
@@ -829,7 +781,7 @@ func computeTileHash(x, y, mask int) int {
 	return int(n & uint32(mask))
 }
 
-func overlapBounds(aMin, aMax, bMin, bMax *[3]float32) bool {
+func overlapBounds(aMin, aMax, bMin, bMax [3]float32) bool {
 	return aMin[0] <= bMax[0] && aMax[0] >= bMin[0] &&
 		aMin[1] <= bMax[1] && aMax[1] >= bMin[1] &&
 		aMin[2] <= bMax[2] && aMax[2] >= bMin[2]

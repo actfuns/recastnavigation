@@ -96,7 +96,7 @@ func (m *NavMesh) GetParams() *NavMeshParams {
 	return &m.Params
 }
 
-func overlapSlabs(amin, amax, bmin, bmax []float32, px, py float32) bool {
+func overlapSlabs(amin, amax, bmin, bmax [2]float32, px, py float32) bool {
 	minx := Max(amin[0]+px, bmin[0]+px)
 	maxx := Min(amax[0]-px, bmax[0]-px)
 	if minx > maxx {
@@ -126,17 +126,19 @@ func overlapSlabs(amin, amax, bmin, bmax []float32, px, py float32) bool {
 	return false
 }
 
-func getSlabCoord(va []float32, side int) float32 {
-	if side == 0 || side == 4 {
+func getSlabCoord(va [3]float32, side int) float32 {
+	switch side {
+	case 0, 4:
 		return va[0]
-	} else if side == 2 || side == 6 {
+	case 2, 6:
 		return va[2]
 	}
 	return 0
 }
 
-func calcSlabEndPoints(va, vb []float32, bmin, bmax []float32, side int) {
-	if side == 0 || side == 4 {
+func calcSlabEndPoints(va, vb [3]float32, bmin, bmax []float32, side int) {
+	switch side {
+	case 0, 4:
 		if va[2] < vb[2] {
 			bmin[0] = va[2]
 			bmin[1] = va[1]
@@ -148,7 +150,7 @@ func calcSlabEndPoints(va, vb []float32, bmin, bmax []float32, side int) {
 			bmax[0] = va[2]
 			bmax[1] = va[1]
 		}
-	} else if side == 2 || side == 6 {
+	case 2, 6:
 		if va[0] < vb[0] {
 			bmin[0] = va[0]
 			bmin[1] = va[1]
@@ -185,7 +187,7 @@ func freeLink(tile *MeshTile, link uint32) {
 }
 
 // FindConnectingPolys finds connecting polygons in a neighbour tile.
-func (m *NavMesh) findConnectingPolys(va, vb []float32, tile *MeshTile, side int, con []PolyRef, conarea []float32, maxcon int) int {
+func (m *NavMesh) findConnectingPolys(va, vb [3]float32, tile *MeshTile, side int, con []PolyRef, conarea []float32, maxcon int) int {
 	if tile == nil {
 		return 0
 	}
@@ -208,8 +210,8 @@ func (m *NavMesh) findConnectingPolys(va, vb []float32, tile *MeshTile, side int
 				continue
 			}
 
-			vc := tile.Verts[poly.Verts[j]*3 : poly.Verts[j]*3+3]
-			vd := tile.Verts[poly.Verts[(j+1)%nv]*3 : poly.Verts[(j+1)%nv]*3+3]
+			vc := [3]float32{tile.Verts[poly.Verts[j]*3], tile.Verts[poly.Verts[j]*3+1], tile.Verts[poly.Verts[j]*3+2]}
+			vd := [3]float32{tile.Verts[poly.Verts[(j+1)%nv]*3], tile.Verts[poly.Verts[(j+1)%nv]*3+1], tile.Verts[poly.Verts[(j+1)%nv]*3+2]}
 			bpos := getSlabCoord(vc, side)
 
 			if Abs(apos-bpos) > 0.01 {
@@ -218,7 +220,7 @@ func (m *NavMesh) findConnectingPolys(va, vb []float32, tile *MeshTile, side int
 
 			calcSlabEndPoints(vc, vd, bmin[:], bmax[:], side)
 
-			if !overlapSlabs(amin[:], amax[:], bmin[:], bmax[:], 0.01, tile.Header.WalkableClimb) {
+			if !overlapSlabs(amin, amax, bmin, bmax, 0.01, tile.Header.WalkableClimb) {
 				continue
 			}
 
@@ -281,8 +283,8 @@ func (m *NavMesh) connectExtLinks(tile, target *MeshTile, side int) {
 				continue
 			}
 
-			va := tile.Verts[poly.Verts[j]*3 : poly.Verts[j]*3+3]
-			vb := tile.Verts[poly.Verts[(j+1)%nv]*3 : poly.Verts[(j+1)%nv]*3+3]
+			va := [3]float32{tile.Verts[poly.Verts[j]*3], tile.Verts[poly.Verts[j]*3+1], tile.Verts[poly.Verts[j]*3+2]}
+			vb := [3]float32{tile.Verts[poly.Verts[(j+1)%nv]*3], tile.Verts[poly.Verts[(j+1)%nv]*3+1], tile.Verts[poly.Verts[(j+1)%nv]*3+2]}
 
 			var nei [4]PolyRef
 			var neia [8]float32
@@ -342,11 +344,10 @@ func (m *NavMesh) connectExtOffMeshLinks(tile, target *MeshTile, side int) {
 			continue
 		}
 
-		halfExtents := []float32{targetCon.Rad, target.Header.WalkableClimb, targetCon.Rad}
+		halfExtents := [3]float32{targetCon.Rad, target.Header.WalkableClimb, targetCon.Rad}
 
-		p := targetCon.Pos[3:]
-		var nearestPt [3]float32
-		ref := m.findNearestPolyInTile(tile, p, halfExtents, nearestPt[:])
+		p := [3]float32{targetCon.Pos[3], targetCon.Pos[4], targetCon.Pos[5]}
+		ref, nearestPt := m.findNearestPolyInTile(tile, p, halfExtents)
 		if ref == 0 {
 			continue
 		}
@@ -439,11 +440,10 @@ func (m *NavMesh) baseOffMeshLinks(tile *MeshTile) {
 		con := &tile.OffMeshCons[i]
 		poly := &tile.Polys[con.Poly]
 
-		halfExtents := []float32{con.Rad, tile.Header.WalkableClimb, con.Rad}
+		halfExtents := [3]float32{con.Rad, tile.Header.WalkableClimb, con.Rad}
 
-		p := con.Pos[0:3]
-		var nearestPt [3]float32
-		ref := m.findNearestPolyInTile(tile, p, halfExtents, nearestPt[:])
+		p := [3]float32{con.Pos[0], con.Pos[1], con.Pos[2]}
+		ref, nearestPt := m.findNearestPolyInTile(tile, p, halfExtents)
 		if ref == 0 {
 			continue
 		}
@@ -484,7 +484,7 @@ func (m *NavMesh) baseOffMeshLinks(tile *MeshTile) {
 	}
 }
 
-func closestPointOnDetailEdges(tile *MeshTile, poly *Poly, pos []float32, closest []float32, onlyBoundary bool) {
+func closestPointOnDetailEdges(tile *MeshTile, poly *Poly, pos [3]float32, closest *[3]float32, onlyBoundary bool) {
 	ip := uint32(0)
 	for i := range tile.Polys {
 		if &tile.Polys[i] == poly {
@@ -496,7 +496,7 @@ func closestPointOnDetailEdges(tile *MeshTile, poly *Poly, pos []float32, closes
 
 	dmin := float32(math.MaxFloat32)
 	tmin := float32(0)
-	var pmin, pmax []float32
+	var pmin, pmax [3]float32
 
 	for i := 0; i < int(pd.TriCount); i++ {
 		tris := tile.DetailTris[(int(pd.TriBase)+i)*4 : (int(pd.TriBase)+i)*4+4]
@@ -519,23 +519,28 @@ func closestPointOnDetailEdges(tile *MeshTile, poly *Poly, pos []float32, closes
 				continue
 			}
 
-			d, t := DistancePtSegSqr2D(pos, v[j], v[k])
+			d, t := DistancePtSegSqr2D(
+				[3]float32{pos[0], pos[1], pos[2]},
+				[3]float32{v[j][0], v[j][1], v[j][2]},
+				[3]float32{v[k][0], v[k][1], v[k][2]},
+			)
 			if d < dmin {
 				dmin = d
 				tmin = t
-				pmin = v[j]
-				pmax = v[k]
+				pmin = [3]float32{v[j][0], v[j][1], v[j][2]}
+				pmax = [3]float32{v[k][0], v[k][1], v[k][2]}
 			}
 		}
 	}
 
-	Vlerp(closest, pmin, pmax, tmin)
+	result := Vlerp([3]float32{pmin[0], pmin[1], pmin[2]}, [3]float32{pmax[0], pmax[1], pmax[2]}, tmin)
+	*closest = result
 }
 
 // GetPolyHeight returns the height of the polygon at the given position.
-func (m *NavMesh) getPolyHeight(tile *MeshTile, poly *Poly, pos []float32, height *float32) bool {
+func (m *NavMesh) getPolyHeight(tile *MeshTile, poly *Poly, pos [3]float32) (float32, bool) {
 	if poly.GetType() == PolyTypeOffMeshConnection {
-		return false
+		return 0, false
 	}
 
 	ip := uint32(0)
@@ -550,15 +555,14 @@ func (m *NavMesh) getPolyHeight(tile *MeshTile, poly *Poly, pos []float32, heigh
 	var verts [VertsPerPolygon * 3]float32
 	nv := int(poly.VertCount)
 	for i := 0; i < nv; i++ {
-		Vcopy(verts[i*3:i*3+3], tile.Verts[poly.Verts[i]*3:poly.Verts[i]*3+3])
+		src := tile.Verts[poly.Verts[i]*3 : poly.Verts[i]*3+3]
+		verts[i*3+0] = src[0]
+		verts[i*3+1] = src[1]
+		verts[i*3+2] = src[2]
 	}
 
 	if !PointInPolygon(pos, verts[:], nv) {
-		return false
-	}
-
-	if height == nil {
-		return true
+		return 0, false
 	}
 
 	for j := 0; j < int(pd.TriCount); j++ {
@@ -571,63 +575,66 @@ func (m *NavMesh) getPolyHeight(tile *MeshTile, poly *Poly, pos []float32, heigh
 				v[k] = tile.DetailVerts[(int(pd.VertBase)+int(t[k])-int(poly.VertCount))*3 : (int(pd.VertBase)+int(t[k])-int(poly.VertCount))*3+3]
 			}
 		}
-		ok, h := ClosestHeightPointTriangle(pos, v[0], v[1], v[2])
+		ok, h := ClosestHeightPointTriangle(
+			pos,
+			[3]float32{v[0][0], v[0][1], v[0][2]},
+			[3]float32{v[1][0], v[1][1], v[1][2]},
+			[3]float32{v[2][0], v[2][1], v[2][2]},
+		)
 		if ok {
-			*height = h
-			return true
+			return h, true
 		}
 	}
 
 	var closest [3]float32
-	closestPointOnDetailEdges(tile, poly, pos, closest[:], false)
-	*height = closest[1]
-	return true
+	closestPointOnDetailEdges(tile, poly, pos, &closest, false)
+	return closest[1], true
 }
 
-func (m *NavMesh) closestPointOnPoly(ref PolyRef, pos []float32, closest []float32, posOverPoly *bool) {
+func (m *NavMesh) closestPointOnPoly(ref PolyRef, pos [3]float32) ([3]float32, bool) {
 	tile, poly := m.GetTileAndPolyByRefUnsafe(ref)
-	Vcopy(closest, pos)
-	if m.getPolyHeight(tile, poly, pos, &closest[1]) {
-		if posOverPoly != nil {
-			*posOverPoly = true
-		}
-		return
-	}
+	var closest [3]float32
 
-	if posOverPoly != nil {
-		*posOverPoly = false
+	h, ok := m.getPolyHeight(tile, poly, pos)
+	if ok {
+		closest = [3]float32{pos[0], h, pos[2]}
+		return closest, true
 	}
 
 	if poly.GetType() == PolyTypeOffMeshConnection {
 		v0 := tile.Verts[poly.Verts[0]*3 : poly.Verts[0]*3+3]
 		v1 := tile.Verts[poly.Verts[1]*3 : poly.Verts[1]*3+3]
-		_, t := DistancePtSegSqr2D(pos, v0, v1)
-		Vlerp(closest, v0, v1, t)
-		return
+		_, t := DistancePtSegSqr2D(
+			pos,
+			[3]float32{v0[0], v0[1], v0[2]},
+			[3]float32{v1[0], v1[1], v1[2]},
+		)
+		r := Vlerp([3]float32{v0[0], v0[1], v0[2]}, [3]float32{v1[0], v1[1], v1[2]}, t)
+		return r, false
 	}
 
-	closestPointOnDetailEdges(tile, poly, pos, closest, true)
+	closestPointOnDetailEdges(tile, poly, pos, &closest, true)
+	return closest, false
 }
 
-func (m *NavMesh) findNearestPolyInTile(tile *MeshTile, center, halfExtents []float32, nearestPt []float32) PolyRef {
+func (m *NavMesh) findNearestPolyInTile(tile *MeshTile, center, halfExtents [3]float32) (PolyRef, [3]float32) {
 	var bmin, bmax [3]float32
-	Vsub(bmin[:], center, halfExtents)
-	Vadd(bmax[:], center, halfExtents)
+	bmin = Vsub(center, halfExtents)
+	bmax = Vadd(center, halfExtents)
 
 	var polys [128]PolyRef
-	polyCount := m.queryPolygonsInTile(tile, bmin[:], bmax[:], polys[:], 128)
+	polyCount := m.queryPolygonsInTile(tile, bmin, bmax, polys[:], 128)
 
 	nearest := PolyRef(0)
+	var nearestPt [3]float32
 	nearestDistanceSqr := float32(math.MaxFloat32)
 	for i := 0; i < polyCount; i++ {
 		ref := polys[i]
-		var closestPtPoly [3]float32
 		var diff [3]float32
-		var posOverPoly bool
 		var d float32
-		m.closestPointOnPoly(ref, center, closestPtPoly[:], &posOverPoly)
+		closestPtPoly, posOverPoly := m.closestPointOnPoly(ref, center)
 
-		Vsub(diff[:], center, closestPtPoly[:])
+		diff = Vsub(center, closestPtPoly)
 		if posOverPoly {
 			d = Abs(diff[1]) - tile.Header.WalkableClimb
 			if d > 0 {
@@ -636,20 +643,20 @@ func (m *NavMesh) findNearestPolyInTile(tile *MeshTile, center, halfExtents []fl
 				d = 0
 			}
 		} else {
-			d = VlenSqr(diff[:])
+			d = VlenSqr(diff)
 		}
 
 		if d < nearestDistanceSqr {
-			Vcopy(nearestPt, closestPtPoly[:])
+			nearestPt = closestPtPoly
 			nearestDistanceSqr = d
 			nearest = ref
 		}
 	}
 
-	return nearest
+	return nearest, nearestPt
 }
 
-func (m *NavMesh) queryPolygonsInTile(tile *MeshTile, qmin, qmax []float32, polys []PolyRef, maxPolys int) int {
+func (m *NavMesh) queryPolygonsInTile(tile *MeshTile, qmin, qmax [3]float32, polys []PolyRef, maxPolys int) int {
 	if tile.BVTree != nil {
 		node := &tile.BVTree[0]
 		bvCount := len(tile.BVTree)
@@ -676,7 +683,7 @@ func (m *NavMesh) queryPolygonsInTile(tile *MeshTile, qmin, qmax []float32, poly
 		n := 0
 		for nodeIdx := 0; nodeIdx < bvCount; {
 			node = &tile.BVTree[nodeIdx]
-			overlap := OverlapQuantBounds(bmin[:], bmax[:], node.Bmin[:], node.Bmax[:])
+			overlap := OverlapQuantBounds(bmin, bmax, node.Bmin, node.Bmax)
 			isLeafNode := node.I >= 0
 
 			if isLeafNode && overlap {
@@ -709,10 +716,10 @@ func (m *NavMesh) queryPolygonsInTile(tile *MeshTile, qmin, qmax []float32, poly
 			bmax[0], bmax[1], bmax[2] = v[0], v[1], v[2]
 			for j := 1; j < int(p.VertCount); j++ {
 				v = tile.Verts[p.Verts[j]*3 : p.Verts[j]*3+3]
-				Vmin(bmin[:], v)
-				Vmax(bmax[:], v)
+				bmin = Vmin(bmin, [3]float32{v[0], v[1], v[2]})
+				bmax = Vmax(bmax, [3]float32{v[0], v[1], v[2]})
 			}
-			if OverlapBounds(qmin, qmax, bmin[:], bmax[:]) {
+			if OverlapBounds(qmin, qmax, bmin, bmax) {
 				if n < maxPolys {
 					polys[n] = base | PolyRef(i)
 					n++
@@ -1107,7 +1114,7 @@ func (m *NavMesh) GetTile(i int) *MeshTile {
 }
 
 // CalcTileLoc calculates the tile grid location for the specified world position.
-func (m *NavMesh) CalcTileLoc(pos []float32) (int, int) {
+func (m *NavMesh) CalcTileLoc(pos [3]float32) (int, int) {
 	tx := int(math.Floor(float64((pos[0] - m.Orig[0]) / m.TileWidth)))
 	ty := int(math.Floor(float64((pos[2] - m.Orig[2]) / m.TileHeight)))
 	return tx, ty
@@ -1174,7 +1181,7 @@ func (m *NavMesh) GetPolyRefBase(tile *MeshTile) PolyRef {
 }
 
 // GetOffMeshConnectionPolyEndPoints gets the end points of an off-mesh connection.
-func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, startPos, endPos []float32) error {
+func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, startPos, endPos [3]float32) error {
 	if polyRef == 0 {
 		return ErrFailure
 	}
@@ -1208,8 +1215,14 @@ func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, st
 		}
 	}
 
-	Vcopy(startPos, tile.Verts[poly.Verts[idx0]*3:poly.Verts[idx0]*3+3])
-	Vcopy(endPos, tile.Verts[poly.Verts[idx1]*3:poly.Verts[idx1]*3+3])
+	verts0 := tile.Verts[poly.Verts[idx0]*3 : poly.Verts[idx0]*3+3]
+	startPos[0] = verts0[0]
+	startPos[1] = verts0[1]
+	startPos[2] = verts0[2]
+	verts1 := tile.Verts[poly.Verts[idx1]*3 : poly.Verts[idx1]*3+3]
+	endPos[0] = verts1[0]
+	endPos[1] = verts1[1]
+	endPos[2] = verts1[2]
 
 	return nil
 }

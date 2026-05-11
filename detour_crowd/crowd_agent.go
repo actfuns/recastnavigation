@@ -30,12 +30,11 @@ type CrowdAgent struct {
 	desiredSpeed float32
 
 	npos [3]float32 // The current agent position. [(x, y, z)]
-	disp [3]float32 // A temporary value used to accumulate agent displacement during iterative collision resolution.
+	disp [3]float32 // A temporary value used to accumulate agent disp
 	dvel [3]float32 // The desired velocity of the agent.
 	nvel [3]float32 // The desired velocity adjusted by obstacle avoidance.
 	vel  [3]float32 // The actual velocity of the agent.
 
-	// The agent's configuration parameters.
 	params CrowdAgentParams
 
 	// The local path corridor corners for the agent. (Straight path.)
@@ -54,7 +53,7 @@ type CrowdAgent struct {
 	targetRef        PolyRef          // Target polyref of the movement request.
 	targetPos        [3]float32       // Target position of the movement request.
 	targetPathqRef   PathQueueRef     // Path finder ref.
-	targetReplan     bool             // Flag indicating that the current path is being replanned.
+	targetReplan     bool             // Flag indicating that the current path is being
 	targetReplanTime float32          // Time since the agent's target was replanned.
 }
 
