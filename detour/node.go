@@ -4,8 +4,8 @@ import (
 	"unsafe"
 )
 
-// dtHashRef hashes a PolyRef for hash table lookups.
-func dtHashRef(a PolyRef) uint32 {
+// HashRef hashes a PolyRef for hash table lookups.
+func HashRef(a PolyRef) uint32 {
 	a += ^(a << 15)
 	a ^= (a >> 10)
 	a += (a << 3)
@@ -26,9 +26,13 @@ type NodePool struct {
 }
 
 // NewNodePool creates a new NodePool.
-func NewNodePool(maxNodes, hashSize int) *NodePool {
-	Assert(dtNextPow2(uint32(hashSize)) == uint32(hashSize))
-	Assert(maxNodes > 0 && maxNodes <= int(NullIdx) && maxNodes <= (1<<NodeParentBits)-1)
+func NewNodePool(maxNodes, hashSize int) (*NodePool, error) {
+	if NextPow2(uint32(hashSize)) != uint32(hashSize) {
+		return nil, ErrInvalidParam
+	}
+	if maxNodes <= 0 || maxNodes > int(NullIdx) || maxNodes > (1<<NodeParentBits)-1 {
+		return nil, ErrInvalidParam
+	}
 
 	pool := &NodePool{
 		nodes:    make([]Node, maxNodes),
@@ -46,7 +50,7 @@ func NewNodePool(maxNodes, hashSize int) *NodePool {
 		pool.next[i] = NullIdx
 	}
 
-	return pool
+	return pool, nil
 }
 
 // Clear clears the node pool.
@@ -108,7 +112,7 @@ func (p *NodePool) GetNodeCount() int {
 // FindNodes finds all nodes with the given id.
 func (p *NodePool) FindNodes(id PolyRef, nodes []*Node, maxNodes int) int {
 	n := 0
-	bucket := dtHashRef(id) & uint32(p.hashSize-1)
+	bucket := HashRef(id) & uint32(p.hashSize-1)
 	i := p.first[bucket]
 	for i != NullIdx {
 		if p.nodes[i].ID == id {
@@ -125,7 +129,7 @@ func (p *NodePool) FindNodes(id PolyRef, nodes []*Node, maxNodes int) int {
 
 // FindNode finds a node by id and state.
 func (p *NodePool) FindNode(id PolyRef, state uint8) *Node {
-	bucket := dtHashRef(id) & uint32(p.hashSize-1)
+	bucket := HashRef(id) & uint32(p.hashSize-1)
 	i := p.first[bucket]
 	for i != NullIdx {
 		if p.nodes[i].ID == id && p.nodes[i].State == state {
@@ -138,7 +142,7 @@ func (p *NodePool) FindNode(id PolyRef, state uint8) *Node {
 
 // GetNode gets a node by id and state, creating one if it doesn't exist.
 func (p *NodePool) GetNode(id PolyRef, state uint8) *Node {
-	bucket := dtHashRef(id) & uint32(p.hashSize-1)
+	bucket := HashRef(id) & uint32(p.hashSize-1)
 	i := p.first[bucket]
 	for i != NullIdx {
 		if p.nodes[i].ID == id && p.nodes[i].State == state {
@@ -178,7 +182,6 @@ type NodeQueue struct {
 
 // NewNodeQueue creates a new NodeQueue.
 func NewNodeQueue(n int) *NodeQueue {
-	Assert(n > 0)
 	return &NodeQueue{
 		heap:     make([]*Node, n+1),
 		capacity: n,
@@ -265,16 +268,4 @@ func (q *NodeQueue) trickleDown(i int, node *Node) {
 type GetNodeIdxResult struct {
 	Node *Node
 	Idx  uint32
-}
-
-// dtNextPow2 is a local helper for testing if a value is a power of two.
-func dtNextPow2(v uint32) uint32 {
-	v--
-	v |= v >> 1
-	v |= v >> 2
-	v |= v >> 4
-	v |= v >> 8
-	v |= v >> 16
-	v++
-	return v
 }

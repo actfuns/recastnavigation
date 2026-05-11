@@ -1071,8 +1071,8 @@ func MergePolyMeshes(meshes []*PolyMesh, mesh *PolyMesh) {
 	maxPolys := 0
 	maxVertsPerMesh := 0
 	for i := 0; i < len(meshes); i++ {
-		Vmin(&mesh.Bmin, &meshes[i].Bmin)
-		Vmax(&mesh.Bmax, &meshes[i].Bmax)
+		mesh.Bmin = Vmin(mesh.Bmin, meshes[i].Bmin)
+		mesh.Bmax = Vmax(mesh.Bmax, meshes[i].Bmax)
 		if meshes[i].Nverts > maxVertsPerMesh {
 			maxVertsPerMesh = meshes[i].Nverts
 		}

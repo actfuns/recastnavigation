@@ -99,12 +99,12 @@ func getHeightDataSeeds(ctx *Context, chf *CompactHeightfield, poly []uint16, np
 		cs := chf.Spans[ci]
 		for i := 0; i < 4; i++ {
 			dir := dirs[i]
-			if GetCon(&cs, dir) == notConnected {
+			if Con(&cs, dir) == notConnected {
 				continue
 			}
 
-			newX := cx + GetDirOffsetX(dir)
-			newY := cy + GetDirOffsetZ(dir)
+			newX := cx + DirOffsetX(dir)
+			newY := cy + DirOffsetZ(dir)
 
 			hpx := newX - hp.xmin
 			hpy := newY - hp.ymin
@@ -118,7 +118,7 @@ func getHeightDataSeeds(ctx *Context, chf *CompactHeightfield, poly []uint16, np
 
 			hp.data[hpx+hpy*hp.width] = 1
 			*queue = append(*queue, newX, newY,
-				int(chf.Cells[(newX+bs)+(newY+bs)*chf.Width].Index)+GetCon(&cs, dir))
+				int(chf.Cells[(newX+bs)+(newY+bs)*chf.Width].Index)+Con(&cs, dir))
 		}
 
 		dirs[directDir], dirs[3] = dirs[3], dirs[directDir]
@@ -161,10 +161,10 @@ func getHeightData(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly i
 
 						border := false
 						for dir := 0; dir < 4; dir++ {
-							if GetCon(&s, dir) != notConnected {
-								ax := x + GetDirOffsetX(dir)
-								ay := y + GetDirOffsetZ(dir)
-								ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&s, dir)
+							if Con(&s, dir) != notConnected {
+								ax := x + DirOffsetX(dir)
+								ay := y + DirOffsetZ(dir)
+								ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&s, dir)
 								as := chf.Spans[ai]
 								if as.Reg != region {
 									border = true
@@ -204,12 +204,12 @@ func getHeightData(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly i
 
 		cs := chf.Spans[ci]
 		for dir := 0; dir < 4; dir++ {
-			if GetCon(&cs, dir) == notConnected {
+			if Con(&cs, dir) == notConnected {
 				continue
 			}
 
-			ax := cx + GetDirOffsetX(dir)
-			ay := cy + GetDirOffsetZ(dir)
+			ax := cx + DirOffsetX(dir)
+			ay := cy + DirOffsetZ(dir)
 			hx := ax - hp.xmin - bs
 			hy := ay - hp.ymin - bs
 
@@ -221,7 +221,7 @@ func getHeightData(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly i
 				continue
 			}
 
-			ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&cs, dir)
+			ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&cs, dir)
 			as := chf.Spans[ai]
 
 			hp.data[hx+hy*hp.width] = as.Y
@@ -371,8 +371,9 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 		bmin := [3]float32{in[0], in[1], in[2]}
 		bmax := [3]float32{in[0], in[1], in[2]}
 		for i := 1; i < nin; i++ {
-			Vmin(&bmin, &[3]float32{in[i*3], in[i*3+1], in[i*3+2]})
-			Vmax(&bmax, &[3]float32{in[i*3], in[i*3+1], in[i*3+2]})
+			v := [3]float32{in[i*3], in[i*3+1], in[i*3+2]}
+			bmin = Vmin(bmin, v)
+			bmax = Vmax(bmax, v)
 		}
 		x0 := int(math.Floor(float64(bmin[0] / sampleDist)))
 		x1 := int(math.Ceil(float64(bmax[0] / sampleDist)))
@@ -451,7 +452,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 	ntris := len(*tris) / 4
 	if ntris > maxTrisConst {
 		*tris = (*tris)[:maxTrisConst*4]
-		ctx.Log(LogError, "rcBuildPolyMeshDetail: Shrinking triangle count from %d to max %d.", ntris, maxTrisConst)
+		ctx.Log(LogError, "BuildPolyMeshDetail: Shrinking triangle count from %d to max %d.", ntris, maxTrisConst)
 	}
 
 	setTriFlags(tris, nhull, hull[:nhull])

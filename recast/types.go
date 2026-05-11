@@ -46,7 +46,7 @@ const NullArea = 0
 // WalkableArea is the default area id used to indicate a walkable polygon.
 const WalkableArea = 63
 
-// NotConnected is the value returned by GetCon if the specified direction is not connected.
+// NotConnected is the value returned by Con if the specified direction is not connected.
 const NotConnected = 0x3f
 
 // Epsilon is used for floating point comparisons.
@@ -372,10 +372,12 @@ func Sqrt(x float32) float32 {
 // Vector helper functions
 
 // Vcross derives the cross product of two vectors.
-func Vcross(dest *[3]float32, v1, v2 *[3]float32) {
-	dest[0] = v1[1]*v2[2] - v1[2]*v2[1]
-	dest[1] = v1[2]*v2[0] - v1[0]*v2[2]
-	dest[2] = v1[0]*v2[1] - v1[1]*v2[0]
+func Vcross(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[1]*v2[2] - v1[2]*v2[1],
+		v1[2]*v2[0] - v1[0]*v2[2],
+		v1[0]*v2[1] - v1[1]*v2[0],
+	}
 }
 
 // Vdot derives the dot product of two vectors.
@@ -384,57 +386,53 @@ func Vdot(v1, v2 *[3]float32) float32 {
 }
 
 // Vmad performs a scaled vector addition.
-func Vmad(dest *[3]float32, v1, v2 *[3]float32, s float32) {
-	dest[0] = v1[0] + v2[0]*s
-	dest[1] = v1[1] + v2[1]*s
-	dest[2] = v1[2] + v2[2]*s
+func Vmad(v1, v2 [3]float32, s float32) [3]float32 {
+	return [3]float32{
+		v1[0] + v2[0]*s,
+		v1[1] + v2[1]*s,
+		v1[2] + v2[2]*s,
+	}
 }
 
 // Vadd performs a vector addition.
-func Vadd(dest *[3]float32, v1, v2 *[3]float32) {
-	dest[0] = v1[0] + v2[0]
-	dest[1] = v1[1] + v2[1]
-	dest[2] = v1[2] + v2[2]
+func Vadd(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[0] + v2[0],
+		v1[1] + v2[1],
+		v1[2] + v2[2],
+	}
 }
 
 // Vsub performs a vector subtraction.
-func Vsub(dest *[3]float32, v1, v2 *[3]float32) {
-	dest[0] = v1[0] - v2[0]
-	dest[1] = v1[1] - v2[1]
-	dest[2] = v1[2] - v2[2]
+func Vsub(v1, v2 [3]float32) [3]float32 {
+	return [3]float32{
+		v1[0] - v2[0],
+		v1[1] - v2[1],
+		v1[2] - v2[2],
+	}
 }
 
 // Vmin selects the minimum value of each element from the specified vectors.
-func Vmin(mn *[3]float32, v *[3]float32) {
-	if v[0] < mn[0] {
-		mn[0] = v[0]
-	}
-	if v[1] < mn[1] {
-		mn[1] = v[1]
-	}
-	if v[2] < mn[2] {
-		mn[2] = v[2]
+func Vmin(mn, v [3]float32) [3]float32 {
+	return [3]float32{
+		min(mn[0], v[0]),
+		min(mn[1], v[1]),
+		min(mn[2], v[2]),
 	}
 }
 
 // Vmax selects the maximum value of each element from the specified vectors.
-func Vmax(mx *[3]float32, v *[3]float32) {
-	if v[0] > mx[0] {
-		mx[0] = v[0]
-	}
-	if v[1] > mx[1] {
-		mx[1] = v[1]
-	}
-	if v[2] > mx[2] {
-		mx[2] = v[2]
+func Vmax(mx, v [3]float32) [3]float32 {
+	return [3]float32{
+		max(mx[0], v[0]),
+		max(mx[1], v[1]),
+		max(mx[2], v[2]),
 	}
 }
 
 // Vcopy performs a vector copy.
-func Vcopy(dest *[3]float32, v *[3]float32) {
-	dest[0] = v[0]
-	dest[1] = v[1]
-	dest[2] = v[2]
+func Vcopy(v [3]float32) [3]float32 {
+	return [3]float32{v[0], v[1], v[2]}
 }
 
 // Vdist returns the distance between two points.
@@ -454,11 +452,9 @@ func VdistSqr(v1, v2 *[3]float32) float32 {
 }
 
 // Vnormalize normalizes the vector.
-func Vnormalize(v *[3]float32) {
+func Vnormalize(v [3]float32) [3]float32 {
 	d := 1.0 / Sqrt(Sqr(v[0])+Sqr(v[1])+Sqr(v[2]))
-	v[0] *= d
-	v[1] *= d
-	v[2] *= d
+	return [3]float32{v[0] * d, v[1] * d, v[2] * d}
 }
 
 // SetCon sets the neighbor connection data for the specified direction.
@@ -468,48 +464,46 @@ func SetCon(span *CompactSpan, direction int, neighborIndex int) {
 	span.Con = (con & ^(0x3f << shift)) | ((uint32(neighborIndex) & 0x3f) << shift)
 }
 
-// GetCon gets neighbor connection data for the specified direction.
-func GetCon(span *CompactSpan, direction int) int {
+// Con gets neighbor connection data for the specified direction.
+func Con(span *CompactSpan, direction int) int {
 	shift := uint32(direction) * 6
 	return int((span.Con >> shift) & 0x3f)
 }
 
-// GetDirOffsetX gets the standard width (x-axis) offset for the specified direction.
-func GetDirOffsetX(direction int) int {
+// DirOffsetX gets the standard width (x-axis) offset for the specified direction.
+func DirOffsetX(direction int) int {
 	offset := [4]int{-1, 0, 1, 0}
 	return offset[direction&0x03]
 }
 
-// GetDirOffsetZ gets the standard height (z-axis) offset for the specified direction.
-func GetDirOffsetZ(direction int) int {
+// DirOffsetZ gets the standard height (z-axis) offset for the specified direction.
+func DirOffsetZ(direction int) int {
 	offset := [4]int{0, 1, 0, -1}
 	return offset[direction&0x03]
 }
 
-// GetDirForOffset gets the direction for the specified offset. One of x and z should be 0.
-func GetDirForOffset(offsetX, offsetZ int) int {
+// DirForOffset gets the direction for the specified offset. One of x and z should be 0.
+func DirForOffset(offsetX, offsetZ int) int {
 	dirs := [5]int{3, 0, -1, 2, 1}
 	return dirs[((offsetZ+1)<<1)+offsetX]
 }
 
 // VsafeNormalize normalizes the vector if the length is greater than zero.
-func VsafeNormalize(v *[3]float32) {
+func VsafeNormalize(v [3]float32) [3]float32 {
 	sqMag := Sqr(v[0]) + Sqr(v[1]) + Sqr(v[2])
 	if sqMag > Epsilon {
 		inverseMag := 1.0 / Sqrt(sqMag)
-		v[0] *= inverseMag
-		v[1] *= inverseMag
-		v[2] *= inverseMag
+		return [3]float32{v[0] * inverseMag, v[1] * inverseMag, v[2] * inverseMag}
 	}
+	return v
 }
 
 // CalcTriNormal calculates the normal of a triangle.
-func CalcTriNormal(v0, v1, v2 *[3]float32, faceNormal *[3]float32) {
-	var e0, e1 [3]float32
-	Vsub(&e0, v1, v0)
-	Vsub(&e1, v2, v0)
-	Vcross(faceNormal, &e0, &e1)
-	Vnormalize(faceNormal)
+func CalcTriNormal(v0, v1, v2 [3]float32) [3]float32 {
+	e0 := Vsub(v1, v0)
+	e1 := Vsub(v2, v0)
+	n := Vcross(e0, e1)
+	return Vnormalize(n)
 }
 
 // OverlapBounds checks whether two bounding boxes overlap.

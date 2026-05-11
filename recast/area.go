@@ -1,6 +1,8 @@
 // Package recast implements navigation mesh generation.
 package recast
 
+import "fmt"
+
 // InsertSort sorts the given data in-place using insertion sort.
 func insertSort(data []uint8) {
 	for valueIndex := 1; valueIndex < len(data); valueIndex++ {
@@ -15,8 +17,10 @@ func insertSort(data []uint8) {
 }
 
 // ErodeWalkableArea erodes the walkable area within the heightfield by the specified radius.
-func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield) bool {
-	Assert(ctx != nil)
+func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield) (bool, error) {
+	if ctx == nil {
+		return false, fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	xSize := chf.Width
 	zSize := chf.Height
@@ -43,13 +47,13 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 				// Check that there is a non-null adjacent span in each of the 4 cardinal directions.
 				neighborCount := 0
 				for direction := 0; direction < 4; direction++ {
-					neighborConnection := GetCon(&span, direction)
+					neighborConnection := Con(&span, direction)
 					if neighborConnection == NotConnected {
 						break
 					}
 
-					neighborX := x + GetDirOffsetX(direction)
-					neighborZ := z + GetDirOffsetZ(direction)
+					neighborX := x + DirOffsetX(direction)
+					neighborZ := z + DirOffsetZ(direction)
 					neighborSpanIndex := int(chf.Cells[neighborX+neighborZ*zStride].Index) + neighborConnection
 
 					if chf.Areas[neighborSpanIndex] == NullArea {
@@ -76,11 +80,11 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 			for spanIndex := int(cell.Index); spanIndex < maxSpanIndex; spanIndex++ {
 				span := chf.Spans[spanIndex]
 
-				if GetCon(&span, 0) != NotConnected {
+				if Con(&span, 0) != NotConnected {
 					// (-1,0)
-					aX := x + GetDirOffsetX(0)
-					aY := z + GetDirOffsetZ(0)
-					aIndex := int(chf.Cells[aX+aY*xSize].Index) + GetCon(&span, 0)
+					aX := x + DirOffsetX(0)
+					aY := z + DirOffsetZ(0)
+					aIndex := int(chf.Cells[aX+aY*xSize].Index) + Con(&span, 0)
 					aSpan := chf.Spans[aIndex]
 					newDistance = uint8(Min(int(distanceToBoundary[aIndex])+2, 255))
 					if newDistance < distanceToBoundary[spanIndex] {
@@ -88,21 +92,21 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 					}
 
 					// (-1,-1)
-					if GetCon(&aSpan, 3) != NotConnected {
-						bX := aX + GetDirOffsetX(3)
-						bY := aY + GetDirOffsetZ(3)
-						bIndex := int(chf.Cells[bX+bY*xSize].Index) + GetCon(&aSpan, 3)
+					if Con(&aSpan, 3) != NotConnected {
+						bX := aX + DirOffsetX(3)
+						bY := aY + DirOffsetZ(3)
+						bIndex := int(chf.Cells[bX+bY*xSize].Index) + Con(&aSpan, 3)
 						newDistance = uint8(Min(int(distanceToBoundary[bIndex])+3, 255))
 						if newDistance < distanceToBoundary[spanIndex] {
 							distanceToBoundary[spanIndex] = newDistance
 						}
 					}
 				}
-				if GetCon(&span, 3) != NotConnected {
+				if Con(&span, 3) != NotConnected {
 					// (0,-1)
-					aX := x + GetDirOffsetX(3)
-					aY := z + GetDirOffsetZ(3)
-					aIndex := int(chf.Cells[aX+aY*xSize].Index) + GetCon(&span, 3)
+					aX := x + DirOffsetX(3)
+					aY := z + DirOffsetZ(3)
+					aIndex := int(chf.Cells[aX+aY*xSize].Index) + Con(&span, 3)
 					aSpan := chf.Spans[aIndex]
 					newDistance = uint8(Min(int(distanceToBoundary[aIndex])+2, 255))
 					if newDistance < distanceToBoundary[spanIndex] {
@@ -110,10 +114,10 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 					}
 
 					// (1,-1)
-					if GetCon(&aSpan, 2) != NotConnected {
-						bX := aX + GetDirOffsetX(2)
-						bY := aY + GetDirOffsetZ(2)
-						bIndex := int(chf.Cells[bX+bY*xSize].Index) + GetCon(&aSpan, 2)
+					if Con(&aSpan, 2) != NotConnected {
+						bX := aX + DirOffsetX(2)
+						bY := aY + DirOffsetZ(2)
+						bIndex := int(chf.Cells[bX+bY*xSize].Index) + Con(&aSpan, 2)
 						newDistance = uint8(Min(int(distanceToBoundary[bIndex])+3, 255))
 						if newDistance < distanceToBoundary[spanIndex] {
 							distanceToBoundary[spanIndex] = newDistance
@@ -132,11 +136,11 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 			for spanIndex := int(cell.Index); spanIndex < maxSpanIndex; spanIndex++ {
 				span := chf.Spans[spanIndex]
 
-				if GetCon(&span, 2) != NotConnected {
+				if Con(&span, 2) != NotConnected {
 					// (1,0)
-					aX := x + GetDirOffsetX(2)
-					aY := z + GetDirOffsetZ(2)
-					aIndex := int(chf.Cells[aX+aY*xSize].Index) + GetCon(&span, 2)
+					aX := x + DirOffsetX(2)
+					aY := z + DirOffsetZ(2)
+					aIndex := int(chf.Cells[aX+aY*xSize].Index) + Con(&span, 2)
 					aSpan := chf.Spans[aIndex]
 					newDistance = uint8(Min(int(distanceToBoundary[aIndex])+2, 255))
 					if newDistance < distanceToBoundary[spanIndex] {
@@ -144,21 +148,21 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 					}
 
 					// (1,1)
-					if GetCon(&aSpan, 1) != NotConnected {
-						bX := aX + GetDirOffsetX(1)
-						bY := aY + GetDirOffsetZ(1)
-						bIndex := int(chf.Cells[bX+bY*xSize].Index) + GetCon(&aSpan, 1)
+					if Con(&aSpan, 1) != NotConnected {
+						bX := aX + DirOffsetX(1)
+						bY := aY + DirOffsetZ(1)
+						bIndex := int(chf.Cells[bX+bY*xSize].Index) + Con(&aSpan, 1)
 						newDistance = uint8(Min(int(distanceToBoundary[bIndex])+3, 255))
 						if newDistance < distanceToBoundary[spanIndex] {
 							distanceToBoundary[spanIndex] = newDistance
 						}
 					}
 				}
-				if GetCon(&span, 1) != NotConnected {
+				if Con(&span, 1) != NotConnected {
 					// (0,1)
-					aX := x + GetDirOffsetX(1)
-					aY := z + GetDirOffsetZ(1)
-					aIndex := int(chf.Cells[aX+aY*xSize].Index) + GetCon(&span, 1)
+					aX := x + DirOffsetX(1)
+					aY := z + DirOffsetZ(1)
+					aIndex := int(chf.Cells[aX+aY*xSize].Index) + Con(&span, 1)
 					aSpan := chf.Spans[aIndex]
 					newDistance = uint8(Min(int(distanceToBoundary[aIndex])+2, 255))
 					if newDistance < distanceToBoundary[spanIndex] {
@@ -166,10 +170,10 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 					}
 
 					// (-1,1)
-					if GetCon(&aSpan, 0) != NotConnected {
-						bX := aX + GetDirOffsetX(0)
-						bY := aY + GetDirOffsetZ(0)
-						bIndex := int(chf.Cells[bX+bY*xSize].Index) + GetCon(&aSpan, 0)
+					if Con(&aSpan, 0) != NotConnected {
+						bX := aX + DirOffsetX(0)
+						bY := aY + DirOffsetZ(0)
+						bIndex := int(chf.Cells[bX+bY*xSize].Index) + Con(&aSpan, 0)
 						newDistance = uint8(Min(int(distanceToBoundary[bIndex])+3, 255))
 						if newDistance < distanceToBoundary[spanIndex] {
 							distanceToBoundary[spanIndex] = newDistance
@@ -187,12 +191,14 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 		}
 	}
 
-	return true
+	return true, nil
 }
 
 // MedianFilterWalkableArea applies a median filter to walkable area types (based on area id), removing noise.
-func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) bool {
-	Assert(ctx != nil)
+func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) (bool, error) {
+	if ctx == nil {
+		return false, fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	xSize := chf.Width
 	zSize := chf.Height
@@ -222,23 +228,23 @@ func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) bool {
 				}
 
 				for dir := 0; dir < 4; dir++ {
-					if GetCon(&span, dir) == NotConnected {
+					if Con(&span, dir) == NotConnected {
 						continue
 					}
 
-					aX := x + GetDirOffsetX(dir)
-					aZ := z + GetDirOffsetZ(dir)
-					aIndex := int(chf.Cells[aX+aZ*zStride].Index) + GetCon(&span, dir)
+					aX := x + DirOffsetX(dir)
+					aZ := z + DirOffsetZ(dir)
+					aIndex := int(chf.Cells[aX+aZ*zStride].Index) + Con(&span, dir)
 					if chf.Areas[aIndex] != NullArea {
 						neighborAreas[dir*2+0] = chf.Areas[aIndex]
 					}
 
 					aSpan := chf.Spans[aIndex]
 					dir2 := (dir + 1) & 0x3
-					neighborConnection2 := GetCon(&aSpan, dir2)
+					neighborConnection2 := Con(&aSpan, dir2)
 					if neighborConnection2 != NotConnected {
-						bX := aX + GetDirOffsetX(dir2)
-						bZ := aZ + GetDirOffsetZ(dir2)
+						bX := aX + DirOffsetX(dir2)
+						bZ := aZ + DirOffsetZ(dir2)
 						bIndex := int(chf.Cells[bX+bZ*zStride].Index) + neighborConnection2
 						if chf.Areas[bIndex] != NullArea {
 							neighborAreas[dir*2+1] = chf.Areas[bIndex]
@@ -253,12 +259,14 @@ func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) bool {
 
 	copy(chf.Areas, areas)
 
-	return true
+	return true, nil
 }
 
 // MarkBoxArea applies an area id to all spans within the specified bounding box (AABB).
-func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds *[3]float32, areaID uint8, chf *CompactHeightfield) {
-	Assert(ctx != nil)
+func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds *[3]float32, areaID uint8, chf *CompactHeightfield) error {
+	if ctx == nil {
+		return fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	defer ctx.ScopedTimer(TimerMarkBoxArea)()
 
@@ -276,7 +284,7 @@ func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds *[3]float32, areaID ui
 
 	// Early-out if the box is outside the bounds of the grid.
 	if maxX < 0 || minX >= xSize || maxZ < 0 || minZ >= zSize {
-		return
+		return nil
 	}
 
 	// Clamp relevant bound coordinates to the grid.
@@ -316,11 +324,14 @@ func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds *[3]float32, areaID ui
 			}
 		}
 	}
+	return nil
 }
 
 // MarkConvexPolyArea applies the area id to all spans within the specified convex polygon.
-func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY float32, areaID uint8, chf *CompactHeightfield) {
-	Assert(ctx != nil)
+func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY float32, areaID uint8, chf *CompactHeightfield) error {
+	if ctx == nil {
+		return fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	defer ctx.ScopedTimer(TimerMarkConvexPolyArea)()
 
@@ -330,12 +341,12 @@ func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY 
 
 	// Compute the bounding box of the polygon
 	var bmin, bmax [3]float32
-	Vcopy(&bmin, &[3]float32{verts[0], verts[1], verts[2]})
-	Vcopy(&bmax, &[3]float32{verts[0], verts[1], verts[2]})
+	bmin = Vcopy([3]float32{verts[0], verts[1], verts[2]})
+	bmax = Vcopy([3]float32{verts[0], verts[1], verts[2]})
 	for i := 1; i < numVerts; i++ {
-		v := &[3]float32{verts[i*3], verts[i*3+1], verts[i*3+2]}
-		Vmin(&bmin, v)
-		Vmax(&bmax, v)
+		v := [3]float32{verts[i*3], verts[i*3+1], verts[i*3+2]}
+		bmin = Vmin(bmin, v)
+		bmax = Vmax(bmax, v)
 	}
 	bmin[1] = minY
 	bmax[1] = maxY
@@ -350,7 +361,7 @@ func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY 
 
 	// Early-out if the polygon lies entirely outside the grid.
 	if maxx < 0 || minx >= xSize || maxz < 0 || minz >= zSize {
-		return
+		return nil
 	}
 
 	// Clamp the polygon footprint to the grid
@@ -396,6 +407,7 @@ func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY 
 			}
 		}
 	}
+	return nil
 }
 
 // OffsetPoly expands a convex polygon along its vertex normals by the given offset amount.
@@ -412,16 +424,14 @@ func OffsetPoly(verts []float32, numVerts int, offset float32, outVerts []float3
 		vertC := &[3]float32{verts[vertIndexC*3], verts[vertIndexC*3+1], verts[vertIndexC*3+2]}
 
 		// From A to B on the x/z plane
-		var prevSegmentDir [3]float32
-		Vsub(&prevSegmentDir, vertB, vertA)
+		prevSegmentDir := Vsub(*vertB, *vertA)
 		prevSegmentDir[1] = 0 // Squash onto x/z plane
-		VsafeNormalize(&prevSegmentDir)
+		prevSegmentDir = VsafeNormalize(prevSegmentDir)
 
 		// From B to C on the x/z plane
-		var currSegmentDir [3]float32
-		Vsub(&currSegmentDir, vertC, vertB)
+		currSegmentDir := Vsub(*vertC, *vertB)
 		currSegmentDir[1] = 0 // Squash onto x/z plane
-		VsafeNormalize(&currSegmentDir)
+		currSegmentDir = VsafeNormalize(currSegmentDir)
 
 		// The y component of the cross product of the two normalized segment directions.
 		cross := currSegmentDir[0]*prevSegmentDir[2] - prevSegmentDir[0]*currSegmentDir[2]
@@ -484,8 +494,10 @@ func OffsetPoly(verts []float32, numVerts int, offset float32, outVerts []float3
 }
 
 // MarkCylinderArea applies the area id to all spans within the specified y-axis-aligned cylinder.
-func MarkCylinderArea(ctx *Context, position *[3]float32, radius, height float32, areaID uint8, chf *CompactHeightfield) {
-	Assert(ctx != nil)
+func MarkCylinderArea(ctx *Context, position *[3]float32, radius, height float32, areaID uint8, chf *CompactHeightfield) error {
+	if ctx == nil {
+		return fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	defer ctx.ScopedTimer(TimerMarkCylinderArea)()
 
@@ -515,7 +527,7 @@ func MarkCylinderArea(ctx *Context, position *[3]float32, radius, height float32
 
 	// Early-out if the cylinder is completely outside the grid bounds.
 	if maxx < 0 || minx >= xSize || maxz < 0 || minz >= zSize {
-		return
+		return nil
 	}
 
 	// Clamp the cylinder bounds to the grid.
@@ -565,4 +577,5 @@ func MarkCylinderArea(ctx *Context, position *[3]float32, radius, height float32
 			}
 		}
 	}
+	return nil
 }

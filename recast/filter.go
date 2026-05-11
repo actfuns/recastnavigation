@@ -1,10 +1,14 @@
 // Package recast implements navigation mesh generation.
 package recast
 
+import "fmt"
+
 // FilterLowHangingWalkableObstacles marks non-walkable spans as walkable if their maximum
 // is within walkableClimb of the span below them.
-func FilterLowHangingWalkableObstacles(ctx *Context, walkableClimb int, hf *Heightfield) {
-	Assert(ctx != nil)
+func FilterLowHangingWalkableObstacles(ctx *Context, walkableClimb int, hf *Heightfield) error {
+	if ctx == nil {
+		return fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	defer ctx.ScopedTimer(TimerFilterLowObstacles)()
 
@@ -34,11 +38,14 @@ func FilterLowHangingWalkableObstacles(ctx *Context, walkableClimb int, hf *Heig
 			}
 		}
 	}
+	return nil
 }
 
 // FilterLedgeSpans marks spans that are ledges as not-walkable.
-func FilterLedgeSpans(ctx *Context, walkableHeight, walkableClimb int, hf *Heightfield) {
-	Assert(ctx != nil)
+func FilterLedgeSpans(ctx *Context, walkableHeight, walkableClimb int, hf *Heightfield) error {
+	if ctx == nil {
+		return fmt.Errorf("recast: ctx must not be nil")
+	}
 
 	defer ctx.ScopedTimer(TimerFilterBorder)()
 
@@ -68,8 +75,8 @@ func FilterLedgeSpans(ctx *Context, walkableHeight, walkableClimb int, hf *Heigh
 				highestTraversableNeighborFloor := int(span.Smax)
 
 				for direction := 0; direction < 4; direction++ {
-					neighborX := x + GetDirOffsetX(direction)
-					neighborZ := z + GetDirOffsetZ(direction)
+					neighborX := x + DirOffsetX(direction)
+					neighborZ := z + DirOffsetZ(direction)
 
 					// Skip neighbours which are out of bounds.
 					if neighborX < 0 || neighborZ < 0 || neighborX >= xSize || neighborZ >= zSize {
@@ -129,12 +136,15 @@ func FilterLedgeSpans(ctx *Context, walkableHeight, walkableClimb int, hf *Heigh
 			}
 		}
 	}
+	return nil
 }
 
 // FilterWalkableLowHeightSpans marks walkable spans as not walkable if the clearance above
 // the span is less than the specified walkableHeight.
-func FilterWalkableLowHeightSpans(ctx *Context, walkableHeight int, hf *Heightfield) {
-	Assert(ctx != nil)
+func FilterWalkableLowHeightSpans(ctx *Context, walkableHeight int, hf *Heightfield) error {
+	if ctx == nil {
+		return fmt.Errorf("recast: ctx must not be nil")
+	}
 	defer ctx.ScopedTimer(TimerFilterWalkable)()
 
 	xSize := hf.Width
@@ -156,4 +166,5 @@ func FilterWalkableLowHeightSpans(ctx *Context, walkableHeight int, hf *Heightfi
 			}
 		}
 	}
+	return nil
 }

@@ -207,8 +207,8 @@ type TileCacheAlloc interface {
 // TileCacheCompressor is the interface for data compression used by the tile cache.
 type TileCacheCompressor interface {
 	MaxCompressedSize(bufferSize int) int
-	Compress(buffer []uint8, compressed []uint8, compressedSize *int) Status
-	Decompress(compressed []uint8, buffer []uint8, bufferSize *int) Status
+	Compress(buffer []uint8, compressed []uint8, compressedSize *int) error
+	Decompress(compressed []uint8, buffer []uint8, bufferSize *int) error
 }
 
 // TileCacheMeshProcess is the interface for processing mesh data during tile building.
@@ -238,39 +238,11 @@ type NavMeshCreateParams struct {
 	Bmax           [3]float32
 }
 
-// Status represents operation status.
-type Status = uint32
-
-const (
-	StatusFailure    Status = 1 << 31
-	StatusSuccess    Status = 1 << 30
-	StatusInProgress Status = 1 << 29
-	StatusDetailMask Status = 0x0ffffff
-)
-
-const (
-	StatusWrongMagic     Status = 1 << 0
-	StatusWrongVersion   Status = 1 << 1
-	StatusOutOfMemory    Status = 1 << 2
-	StatusInvalidParam   Status = 1 << 3
-	StatusBufferTooSmall Status = 1 << 4
-	StatusPartialResult  Status = 1 << 5
-)
-
-// StatusSucceed returns true if status has Success bit set.
-func StatusSucceed(s Status) bool { return (s & StatusSuccess) != 0 }
-
-// StatusFailed returns true if status has Failure bit set.
-func StatusFailed(s Status) bool { return (s & StatusFailure) != 0 }
-
-// StatusDetail returns true if specific detail flag is set.
-func StatusDetail(s Status, d Status) bool { return (s & d) != 0 }
-
-// NavMeshInterface defines the subset of dtNavMesh methods used by TileCache.
+// NavMeshInterface defines the subset of NavMesh methods used by TileCache.
 type NavMeshInterface interface {
-	RemoveTile(ref uint32, data *[]uint8, dataSize *int) Status
+	RemoveTile(ref uint32, data *[]uint8, dataSize *int) error
 	GetTileRefAt(tx, ty, tlayer int32) uint32
-	AddTile(data []uint8, dataSize int, flags uint8, tileRef *uint32) Status
+	AddTile(data []uint8, dataSize int, flags uint8, tileRef *uint32) error
 }
 
 // Utility functions

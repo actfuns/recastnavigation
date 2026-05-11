@@ -118,9 +118,9 @@ func (c *PathCorridor) OptimizePathTopology(navquery NavMeshQueryInterface, filt
 	nres := 0
 	navquery.InitSlicedFindPath(c.path[0], c.path[c.npath-1], c.pos, c.target, filter)
 	navquery.UpdateSlicedFindPath(maxIter, nil)
-	status := navquery.FinalizeSlicedFindPathPartial(c.path[:c.npath], c.npath, res, &nres, maxRes)
+	err := navquery.FinalizeSlicedFindPathPartial(c.path[:c.npath], c.npath, res, &nres, maxRes)
 
-	if StatusSucceed(status) && nres > 0 {
+	if err == nil && nres > 0 {
 		c.npath = mergeCorridorStartShortcut(c.path, c.npath, c.maxPath, res, nres)
 		return true
 	}
@@ -225,9 +225,9 @@ func (c *PathCorridor) MovePosition(npos *[3]float32, navquery NavMeshQueryInter
 	const maxVisited = 16
 	visited := make([]PolyRef, maxVisited)
 	nvisited := 0
-	status := navquery.MoveAlongSurface(c.path[0], c.pos, *npos, filter,
+	err := navquery.MoveAlongSurface(c.path[0], c.pos, *npos, filter,
 		&result, visited, &nvisited, maxVisited)
-	if StatusSucceed(status) {
+	if err == nil {
 		c.npath = mergeCorridorStartMoved(c.path, c.npath, c.maxPath, visited, nvisited)
 
 		// Adjust the position to stay on top of the navmesh.
@@ -247,9 +247,9 @@ func (c *PathCorridor) MoveTargetPosition(npos *[3]float32, navquery NavMeshQuer
 	const maxVisited = 16
 	visited := make([]PolyRef, maxVisited)
 	nvisited := 0
-	status := navquery.MoveAlongSurface(c.path[c.npath-1], c.target, *npos, filter,
+	err := navquery.MoveAlongSurface(c.path[c.npath-1], c.target, *npos, filter,
 		&result, visited, &nvisited, maxVisited)
-	if StatusSucceed(status) {
+	if err == nil {
 		c.npath = mergeCorridorEndMoved(c.path, c.npath, c.maxPath, visited, nvisited)
 		c.target = result
 		return true

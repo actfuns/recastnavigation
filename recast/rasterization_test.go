@@ -27,7 +27,7 @@ func TestAddSpan(t *testing.T) {
 	const flagMergeThr = 1
 
 	t.Run("Add a span to an empty heightfield", func(t *testing.T) {
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(1), hf.Spans[0].Smax)
@@ -40,11 +40,11 @@ func TestAddSpan(t *testing.T) {
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
 		// min == max
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 0, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 0, area, flagMergeThr)
 		assert.Nil(t, hf.Spans[0])
 
 		// min > max
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 1, 0, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 1, 0, area, flagMergeThr)
 		assert.Nil(t, hf.Spans[0])
 	})
 
@@ -52,14 +52,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(1), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(area), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.NotNil(t, hf.Spans[0].Next)
 		assert.Equal(t, uint32(2), hf.Spans[0].Next.Smin)
@@ -72,14 +72,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, 42, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, 42, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(1), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(42), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 1, 2, 24, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 1, 2, 24, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(2), hf.Spans[0].Smax)
@@ -91,14 +91,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, 42, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, 42, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(1), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(42), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 1, 8, 24, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 1, 8, 24, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(8), hf.Spans[0].Smax)
@@ -110,14 +110,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(1), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(area), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 1, 2, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 1, 2, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(2), hf.Spans[0].Smax)
@@ -129,14 +129,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(1), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(area), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0].Next)
 		assert.Equal(t, uint32(2), hf.Spans[0].Next.Smin)
 		assert.Equal(t, uint32(3), hf.Spans[0].Next.Smax)
@@ -144,7 +144,7 @@ func TestAddSpan(t *testing.T) {
 		assert.Nil(t, hf.Spans[0].Next.Next)
 
 		// After adding the third span, they should all get merged into a single span.
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 1, 2, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 1, 2, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(3), hf.Spans[0].Smax)
@@ -156,9 +156,9 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr))
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr))
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 6, 7, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr)
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 1, area, flagMergeThr)
+		_, _ = AddSpan(ctx, &hf, 0, 0, 6, 7, area, flagMergeThr)
 
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
@@ -181,14 +181,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 8, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 8, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(8), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(area), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 2, 3, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(8), hf.Spans[0].Smax)
@@ -200,14 +200,14 @@ func TestAddSpan(t *testing.T) {
 		// Reset heightfield
 		hf.Spans = make([]*Span, hf.Width*hf.Height)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 0, 4, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 0, 4, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(4), hf.Spans[0].Smax)
 		assert.Equal(t, uint32(area), hf.Spans[0].Area)
 		assert.Nil(t, hf.Spans[0].Next)
 
-		assert.True(t, AddSpan(ctx, &hf, 0, 0, 2, 6, area, flagMergeThr))
+		_, _ = AddSpan(ctx, &hf, 0, 0, 2, 6, area, flagMergeThr)
 		assert.NotNil(t, hf.Spans[0])
 		assert.Equal(t, uint32(0), hf.Spans[0].Smin)
 		assert.Equal(t, uint32(6), hf.Spans[0].Smax)
@@ -239,7 +239,7 @@ func TestAllocSpan(t *testing.T) {
 	t.Run("Attempting to add more spans than the span pool size allocates a new page", func(t *testing.T) {
 		for x := 0; x < xSize; x++ {
 			for z := 0; z < zSize; z++ {
-				assert.True(t, AddSpan(ctx, &hf, x, z, 0, 1, area, flagMergeThr))
+				_, _ = AddSpan(ctx, &hf, x, z, 0, 1, area, flagMergeThr)
 			}
 		}
 	})
@@ -287,7 +287,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{2.0, 0.0, 0.0}
 		v2 := [3]float32{0.0, 0.0, 2.0}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -310,7 +312,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{1.0, 0.0, 0.0}
 		v2 := [3]float32{0.0, 0.0, 1.0}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -336,7 +340,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{4.0, 0.0, -2.0}
 		v2 := [3]float32{-2.0, 0.0, 4.0}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -358,7 +364,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v0 := [3]float32{-5.0, 0.0, -5.0}
 		v1 := [3]float32{-5.0, 0.0, 5.0}
 		v2 := [3]float32{5.0, 0.0, -5.0}
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that no spans were added
 		for x := 0; x < xSize; x++ {
@@ -378,7 +386,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v0 = [3]float32{0.0, -1.0, 0.0}
 		v1 = [3]float32{5.0, -1.0, 5.0}
 		v2 = [3]float32{5.0, -1.0, 0.0}
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err = RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that no spans were added
 		for x := 0; x < xSize; x++ {
@@ -394,7 +404,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v0 = [3]float32{0.0, 40.0, 0.0}
 		v1 = [3]float32{5.0, 40.0, 5.0}
 		v2 = [3]float32{5.0, 40.0, 0.0}
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err = RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that no spans were added
 		for x := 0; x < xSize; x++ {
@@ -415,7 +427,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{1.01, 0.0, -1.0}
 		v2 := [3]float32{-1.0, 0.0, 1.01}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -438,7 +452,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{0.5, 0.0, 0.5}
 		v2 := [3]float32{0.5, 2.01, 0.5}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -460,7 +476,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{4.0, 0.0, 0.5}
 		v2 := [3]float32{2.0, 2.0, 0.5}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -485,7 +503,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{1.0, -5.0, 1.0}
 		v2 := [3]float32{0.5, 15.0, 0.5}
 
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that only expected cells have spans
 		for x := 0; x < xSize; x++ {
@@ -506,7 +526,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v0 := [3]float32{1.0, 0.0, 0.5}
 		v1 := [3]float32{2.0, 0.0, 0.5}
 		v2 := [3]float32{4.0, 0.0, 0.5}
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that no spans were added
 		for x := 0; x < xSize; x++ {
@@ -520,7 +542,9 @@ func TestRasterizeTriangle(t *testing.T) {
 
 		// All vertices are the same point
 		v0 = [3]float32{0.5, 0.0, 0.5}
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v0, &v0, WalkableArea, &hf, 1))
+		ok, err = RasterizeTriangle(ctx, &v0, &v0, &v0, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that no spans were added
 		for x := 0; x < xSize; x++ {
@@ -538,7 +562,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v0 := [3]float32{-10.0, 5.5, -10.0}
 		v1 := [3]float32{-10.0, 5.5, 3.0}
 		v2 := [3]float32{3.0, 5.5, -10.0}
-		assert.True(t, RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1))
+		ok, err := RasterizeTriangle(ctx, &v0, &v1, &v2, WalkableArea, &hf, 1)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check that no spans were added
 		for x := 0; x < xSize; x++ {
@@ -547,4 +573,11 @@ func TestRasterizeTriangle(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestRasterizeNilCtx tests nil ctx returns an error
+func TestRasterizeNilCtx(t *testing.T) {
+	var hf Heightfield
+	_, err := RasterizeTriangle(nil, &[3]float32{}, &[3]float32{}, &[3]float32{}, 0, &hf, 0)
+	assert.Error(t, err)
 }

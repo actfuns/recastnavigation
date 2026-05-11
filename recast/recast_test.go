@@ -2,6 +2,7 @@ package recast
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -82,13 +83,38 @@ func TestSqrt(t *testing.T) {
 	})
 }
 
+// TestClampF32 tests the ClampF32 function
+func TestClampF32(t *testing.T) {
+	assert.InDelta(t, float32(0.5), ClampF32(0.5, 0, 1), 0.0001)
+	assert.InDelta(t, float32(0), ClampF32(-0.5, 0, 1), 0.0001)
+	assert.InDelta(t, float32(1), ClampF32(1.5, 0, 1), 0.0001)
+}
+
+// TestMinF tests the MinF function
+func TestMinF(t *testing.T) {
+	assert.InDelta(t, float32(1.5), MinF(1.5, 2.0), 0.0001)
+	assert.InDelta(t, float32(1.5), MinF(2.0, 1.5), 0.0001)
+}
+
+// TestMaxF tests the MaxF function
+func TestMaxF(t *testing.T) {
+	assert.InDelta(t, float32(2.0), MaxF(1.5, 2.0), 0.0001)
+	assert.InDelta(t, float32(2.0), MaxF(2.0, 1.5), 0.0001)
+}
+
+// TestAbsF tests the AbsF function
+func TestAbsF(t *testing.T) {
+	assert.InDelta(t, float32(3.5), AbsF(-3.5), 0.0001)
+	assert.InDelta(t, float32(0), AbsF(0), 0.0001)
+	assert.InDelta(t, float32(2.0), AbsF(2.0), 0.0001)
+}
+
 // TestVcross tests the Vcross function
 func TestVcross(t *testing.T) {
 	t.Run("Computes cross product", func(t *testing.T) {
 		v1 := [3]float32{3, -3, 1}
 		v2 := [3]float32{4, 9, 2}
-		var result [3]float32
-		Vcross(&result, &v1, &v2)
+		result := Vcross(v1, v2)
 		assert.InDelta(t, -15.0, result[0], 0.0001)
 		assert.InDelta(t, -2.0, result[1], 0.0001)
 		assert.InDelta(t, 39.0, result[2], 0.0001)
@@ -96,8 +122,7 @@ func TestVcross(t *testing.T) {
 
 	t.Run("Cross product with itself is zero", func(t *testing.T) {
 		v1 := [3]float32{3, -3, 1}
-		var result [3]float32
-		Vcross(&result, &v1, &v1)
+		result := Vcross(v1, v1)
 		assert.InDelta(t, 0.0, result[0], 0.0001)
 		assert.InDelta(t, 0.0, result[1], 0.0001)
 		assert.InDelta(t, 0.0, result[2], 0.0001)
@@ -125,8 +150,7 @@ func TestVmad(t *testing.T) {
 	t.Run("scaled add two vectors", func(t *testing.T) {
 		v1 := [3]float32{1, 2, 3}
 		v2 := [3]float32{0, 2, 4}
-		var result [3]float32
-		Vmad(&result, &v1, &v2, 2)
+		result := Vmad(v1, v2, 2)
 		assert.InDelta(t, 1.0, result[0], 0.0001)
 		assert.InDelta(t, 6.0, result[1], 0.0001)
 		assert.InDelta(t, 11.0, result[2], 0.0001)
@@ -135,8 +159,7 @@ func TestVmad(t *testing.T) {
 	t.Run("second vector is scaled, first is not", func(t *testing.T) {
 		v1 := [3]float32{1, 2, 3}
 		v2 := [3]float32{5, 6, 7}
-		var result [3]float32
-		Vmad(&result, &v1, &v2, 0)
+		result := Vmad(v1, v2, 0)
 		assert.InDelta(t, 1.0, result[0], 0.0001)
 		assert.InDelta(t, 2.0, result[1], 0.0001)
 		assert.InDelta(t, 3.0, result[2], 0.0001)
@@ -148,8 +171,7 @@ func TestVadd(t *testing.T) {
 	t.Run("add two vectors", func(t *testing.T) {
 		v1 := [3]float32{1, 2, 3}
 		v2 := [3]float32{5, 6, 7}
-		var result [3]float32
-		Vadd(&result, &v1, &v2)
+		result := Vadd(v1, v2)
 		assert.InDelta(t, 6.0, result[0], 0.0001)
 		assert.InDelta(t, 8.0, result[1], 0.0001)
 		assert.InDelta(t, 10.0, result[2], 0.0001)
@@ -161,8 +183,7 @@ func TestVsub(t *testing.T) {
 	t.Run("subtract two vectors", func(t *testing.T) {
 		v1 := [3]float32{5, 4, 3}
 		v2 := [3]float32{1, 2, 3}
-		var result [3]float32
-		Vsub(&result, &v1, &v2)
+		result := Vsub(v1, v2)
 		assert.InDelta(t, 4.0, result[0], 0.0001)
 		assert.InDelta(t, 2.0, result[1], 0.0001)
 		assert.InDelta(t, 0.0, result[2], 0.0001)
@@ -174,28 +195,28 @@ func TestVmin(t *testing.T) {
 	t.Run("selects the min component from the vectors", func(t *testing.T) {
 		v1 := [3]float32{5, 4, 0}
 		v2 := [3]float32{1, 2, 9}
-		Vmin(&v1, &v2)
-		assert.InDelta(t, 1.0, v1[0], 0.0001)
-		assert.InDelta(t, 2.0, v1[1], 0.0001)
-		assert.InDelta(t, 0.0, v1[2], 0.0001)
+		result := Vmin(v1, v2)
+		assert.InDelta(t, 1.0, result[0], 0.0001)
+		assert.InDelta(t, 2.0, result[1], 0.0001)
+		assert.InDelta(t, 0.0, result[2], 0.0001)
 	})
 
 	t.Run("v1 is min", func(t *testing.T) {
 		v1 := [3]float32{1, 2, 3}
 		v2 := [3]float32{4, 5, 6}
-		Vmin(&v1, &v2)
-		assert.InDelta(t, 1.0, v1[0], 0.0001)
-		assert.InDelta(t, 2.0, v1[1], 0.0001)
-		assert.InDelta(t, 3.0, v1[2], 0.0001)
+		result := Vmin(v1, v2)
+		assert.InDelta(t, 1.0, result[0], 0.0001)
+		assert.InDelta(t, 2.0, result[1], 0.0001)
+		assert.InDelta(t, 3.0, result[2], 0.0001)
 	})
 
 	t.Run("v2 is min", func(t *testing.T) {
 		v1 := [3]float32{4, 5, 6}
 		v2 := [3]float32{1, 2, 3}
-		Vmin(&v1, &v2)
-		assert.InDelta(t, 1.0, v1[0], 0.0001)
-		assert.InDelta(t, 2.0, v1[1], 0.0001)
-		assert.InDelta(t, 3.0, v1[2], 0.0001)
+		result := Vmin(v1, v2)
+		assert.InDelta(t, 1.0, result[0], 0.0001)
+		assert.InDelta(t, 2.0, result[1], 0.0001)
+		assert.InDelta(t, 3.0, result[2], 0.0001)
 	})
 }
 
@@ -204,28 +225,28 @@ func TestVmax(t *testing.T) {
 	t.Run("selects the max component from the vectors", func(t *testing.T) {
 		v1 := [3]float32{5, 4, 0}
 		v2 := [3]float32{1, 2, 9}
-		Vmax(&v1, &v2)
-		assert.InDelta(t, 5.0, v1[0], 0.0001)
-		assert.InDelta(t, 4.0, v1[1], 0.0001)
-		assert.InDelta(t, 9.0, v1[2], 0.0001)
+		result := Vmax(v1, v2)
+		assert.InDelta(t, 5.0, result[0], 0.0001)
+		assert.InDelta(t, 4.0, result[1], 0.0001)
+		assert.InDelta(t, 9.0, result[2], 0.0001)
 	})
 
 	t.Run("v2 is max", func(t *testing.T) {
 		v1 := [3]float32{1, 2, 3}
 		v2 := [3]float32{4, 5, 6}
-		Vmax(&v1, &v2)
-		assert.InDelta(t, 4.0, v1[0], 0.0001)
-		assert.InDelta(t, 5.0, v1[1], 0.0001)
-		assert.InDelta(t, 6.0, v1[2], 0.0001)
+		result := Vmax(v1, v2)
+		assert.InDelta(t, 4.0, result[0], 0.0001)
+		assert.InDelta(t, 5.0, result[1], 0.0001)
+		assert.InDelta(t, 6.0, result[2], 0.0001)
 	})
 
 	t.Run("v1 is max", func(t *testing.T) {
 		v1 := [3]float32{4, 5, 6}
 		v2 := [3]float32{1, 2, 3}
-		Vmax(&v1, &v2)
-		assert.InDelta(t, 4.0, v1[0], 0.0001)
-		assert.InDelta(t, 5.0, v1[1], 0.0001)
-		assert.InDelta(t, 6.0, v1[2], 0.0001)
+		result := Vmax(v1, v2)
+		assert.InDelta(t, 4.0, result[0], 0.0001)
+		assert.InDelta(t, 5.0, result[1], 0.0001)
+		assert.InDelta(t, 6.0, result[2], 0.0001)
 	})
 }
 
@@ -233,8 +254,7 @@ func TestVmax(t *testing.T) {
 func TestVcopy(t *testing.T) {
 	t.Run("copies a vector into another vector", func(t *testing.T) {
 		v1 := [3]float32{5, 4, 0}
-		result := [3]float32{1, 2, 9}
-		Vcopy(&result, &v1)
+		result := Vcopy(v1)
 		assert.InDelta(t, 5.0, result[0], 0.0001)
 		assert.InDelta(t, 4.0, result[1], 0.0001)
 		assert.InDelta(t, 0.0, result[2], 0.0001)
@@ -284,14 +304,42 @@ func TestVdistSqr(t *testing.T) {
 func TestVnormalize(t *testing.T) {
 	t.Run("normalizing reduces magnitude to 1", func(t *testing.T) {
 		v := [3]float32{3, 3, 3}
-		Vnormalize(&v)
+		result := Vnormalize(v)
 		expected := Sqrt(1.0 / 3.0)
-		assert.InDelta(t, expected, v[0], 0.0001)
-		assert.InDelta(t, expected, v[1], 0.0001)
-		assert.InDelta(t, expected, v[2], 0.0001)
-		magnitude := Sqrt(Sqr(v[0]) + Sqr(v[1]) + Sqr(v[2]))
+		assert.InDelta(t, expected, result[0], 0.0001)
+		assert.InDelta(t, expected, result[1], 0.0001)
+		assert.InDelta(t, expected, result[2], 0.0001)
+		magnitude := Sqrt(Sqr(result[0]) + Sqr(result[1]) + Sqr(result[2]))
 		assert.InDelta(t, 1.0, magnitude, 0.0001)
 	})
+}
+
+// TestVsafeNormalize tests the VsafeNormalize function
+func TestVsafeNormalize(t *testing.T) {
+	t.Run("normal non-zero vector", func(t *testing.T) {
+		v := [3]float32{3, 0, 0}
+		result := VsafeNormalize(v)
+		assert.InDelta(t, 1.0, result[0], 0.0001)
+		assert.InDelta(t, 0.0, result[1], 0.0001)
+		assert.InDelta(t, 0.0, result[2], 0.0001)
+	})
+
+	t.Run("zero vector returns unchanged", func(t *testing.T) {
+		v := [3]float32{0, 0, 0}
+		result := VsafeNormalize(v)
+		assert.Equal(t, [3]float32{0, 0, 0}, result)
+	})
+}
+
+// TestCalcTriNormal tests the CalcTriNormal function
+func TestCalcTriNormal(t *testing.T) {
+	v0 := [3]float32{0, 0, 0}
+	v1 := [3]float32{1, 0, 0}
+	v2 := [3]float32{0, 0, 1}
+	normal := CalcTriNormal(v0, v1, v2)
+	assert.InDelta(t, 0.0, normal[0], 0.0001)
+	assert.InDelta(t, -1.0, normal[1], 0.0001)
+	assert.InDelta(t, 0.0, normal[2], 0.0001)
 }
 
 // TestCalcBounds tests the CalcBounds function
@@ -458,6 +506,211 @@ func TestClearUnwalkableTriangles(t *testing.T) {
 	})
 }
 
+// TestHeightFieldSpanCount tests the HeightFieldSpanCount function
+func TestHeightFieldSpanCount(t *testing.T) {
+	ctx := NewContext(false)
+	var hf Heightfield
+	hf.Width = 2
+	hf.Height = 2
+	hf.Spans = make([]*Span, 4)
+
+	hf.Spans[0] = &Span{Smin: 0, Smax: 1, Area: 1} // has a walkable span
+	hf.Spans[1] = nil                              // no span
+	// [2], [3] are nil
+
+	count := HeightFieldSpanCount(ctx, &hf)
+	assert.Equal(t, 1, count)
+}
+
+// TestDirOffsetX tests the DirOffsetX function
+func TestDirOffsetX(t *testing.T) {
+	assert.Equal(t, -1, DirOffsetX(0)) // -x
+	assert.Equal(t, 0, DirOffsetX(1))  // +z
+	assert.Equal(t, 1, DirOffsetX(2))  // +x
+	assert.Equal(t, 0, DirOffsetX(3))  // -z
+	// wraps with &0x03
+	assert.Equal(t, -1, DirOffsetX(4))
+	assert.Equal(t, 0, DirOffsetX(5))
+}
+
+// TestDirOffsetZ tests the DirOffsetZ function
+func TestDirOffsetZ(t *testing.T) {
+	assert.Equal(t, 0, DirOffsetZ(0))  // -x
+	assert.Equal(t, 1, DirOffsetZ(1))  // +z
+	assert.Equal(t, 0, DirOffsetZ(2))  // +x
+	assert.Equal(t, -1, DirOffsetZ(3)) // -z
+}
+
+// TestDirForOffset tests the DirForOffset function
+func TestDirForOffset(t *testing.T) {
+	assert.Equal(t, 0, DirForOffset(-1, 0)) // -x -> dir 0
+	assert.Equal(t, 1, DirForOffset(0, 1))  // +z -> dir 1
+	assert.Equal(t, 2, DirForOffset(1, 0))  // +x -> dir 2
+	assert.Equal(t, 3, DirForOffset(0, -1)) // -z -> dir 3
+	assert.Equal(t, -1, DirForOffset(0, 0)) // no offset
+}
+
+// TestSetConCon tests SetCon and Con round-trip
+func TestSetConCon(t *testing.T) {
+	var span CompactSpan
+	SetCon(&span, 0, 1)
+	SetCon(&span, 1, 2)
+	SetCon(&span, 2, 3)
+	SetCon(&span, 3, 4)
+
+	assert.Equal(t, 1, Con(&span, 0))
+	assert.Equal(t, 2, Con(&span, 1))
+	assert.Equal(t, 3, Con(&span, 2))
+	assert.Equal(t, 4, Con(&span, 3))
+
+	// Overwrite a direction
+	SetCon(&span, 1, 63)
+	assert.Equal(t, 63, Con(&span, 1))
+	// Other directions unchanged
+	assert.Equal(t, 1, Con(&span, 0))
+}
+
+// --- Context tests ---
+
+func TestNewContext(t *testing.T) {
+	ctx := NewContext(false)
+	assert.NotNil(t, ctx)
+	assert.False(t, ctx.logEnabled)
+	assert.False(t, ctx.timerEnabled)
+
+	ctx2 := NewContext(true)
+	assert.NotNil(t, ctx2)
+	assert.True(t, ctx2.logEnabled)
+	assert.True(t, ctx2.timerEnabled)
+}
+
+func TestContextLog(t *testing.T) {
+	t.Run("log disabled does nothing", func(t *testing.T) {
+		ctx := NewContext(false)
+		ctx.Log(LogWarning, "should not panic %d", 42)
+	})
+
+	t.Run("log with callback receives message", func(t *testing.T) {
+		ctx := NewContext(true)
+		var capturedCategory LogCategory
+		var capturedMsg string
+		ctx.SetLogFunc(func(category LogCategory, msg string) {
+			capturedCategory = category
+			capturedMsg = msg
+		})
+		ctx.Log(LogWarning, "test %d", 123)
+		assert.Equal(t, LogWarning, capturedCategory)
+		assert.Equal(t, "test 123", capturedMsg)
+	})
+
+	t.Run("enable/disable log toggle", func(t *testing.T) {
+		ctx := NewContext(false)
+		logged := false
+		ctx.SetLogFunc(func(LogCategory, string) { logged = true })
+		ctx.Log(LogWarning, "msg")
+		assert.False(t, logged)
+
+		ctx.EnableLog(true)
+		ctx.Log(LogWarning, "msg")
+		assert.True(t, logged)
+	})
+}
+
+func TestContextTimer(t *testing.T) {
+	t.Run("timer disabled returns -1", func(t *testing.T) {
+		ctx := NewContext(false)
+		d := ctx.GetAccumulatedTime(TimerRasterizeTriangles)
+		assert.Equal(t, time.Duration(-1), d)
+	})
+
+	t.Run("timer measures elapsed time", func(t *testing.T) {
+		ctx := NewContext(true)
+		ctx.StartTimer(TimerRasterizeTriangles)
+		ctx.StopTimer(TimerRasterizeTriangles)
+		d := ctx.GetAccumulatedTime(TimerRasterizeTriangles)
+		assert.Greater(t, d, time.Duration(0))
+	})
+
+	t.Run("scoped timer", func(t *testing.T) {
+		ctx := NewContext(true)
+		func() {
+			defer ctx.ScopedTimer(TimerRasterizeTriangles)()
+		}()
+		d := ctx.GetAccumulatedTime(TimerRasterizeTriangles)
+		assert.Greater(t, d, time.Duration(0))
+	})
+
+	t.Run("reset timers clears accumulated time", func(t *testing.T) {
+		ctx := NewContext(true)
+		ctx.StartTimer(TimerRasterizeTriangles)
+		ctx.StopTimer(TimerRasterizeTriangles)
+		ctx.ResetTimers()
+		d := ctx.GetAccumulatedTime(TimerRasterizeTriangles)
+		assert.Equal(t, time.Duration(-1), d)
+	})
+
+	t.Run("unknown timer returns -1", func(t *testing.T) {
+		ctx := NewContext(true)
+		d := ctx.GetAccumulatedTime(TimerBuildCompactHeightfield)
+		assert.Equal(t, time.Duration(-1), d)
+	})
+
+	t.Run("enable/disable timer toggle", func(t *testing.T) {
+		ctx := NewContext(false)
+		assert.Equal(t, time.Duration(-1), ctx.GetAccumulatedTime(TimerRasterizeTriangles))
+
+		ctx.EnableTimer(true)
+		ctx.StartTimer(TimerRasterizeTriangles)
+		ctx.StopTimer(TimerRasterizeTriangles)
+		assert.Greater(t, ctx.GetAccumulatedTime(TimerRasterizeTriangles), time.Duration(0))
+	})
+}
+
+// --- Nil ctx error path tests ---
+
+func TestBuildCompactHeightfieldNilCtx(t *testing.T) {
+	var hf Heightfield
+	var chf CompactHeightfield
+	_, err := BuildCompactHeightfield(nil, 1, 1, &hf, &chf)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "recast: ctx must not be nil")
+}
+
+func TestErodeWalkableAreaNilCtx(t *testing.T) {
+	var chf CompactHeightfield
+	_, err := ErodeWalkableArea(nil, 1, &chf)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ctx must not be nil")
+}
+
+func TestMedianFilterWalkableAreaNilCtx(t *testing.T) {
+	var chf CompactHeightfield
+	_, err := MedianFilterWalkableArea(nil, &chf)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ctx must not be nil")
+}
+
+func TestMarkBoxAreaNilCtx(t *testing.T) {
+	bmin := [3]float32{0, 0, 0}
+	bmax := [3]float32{1, 1, 1}
+	err := MarkBoxArea(nil, &bmin, &bmax, 1, &CompactHeightfield{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ctx must not be nil")
+}
+
+func TestMarkConvexPolyAreaNilCtx(t *testing.T) {
+	err := MarkConvexPolyArea(nil, nil, 0, 0, 0, 1, &CompactHeightfield{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ctx must not be nil")
+}
+
+func TestMarkCylinderAreaNilCtx(t *testing.T) {
+	pos := [3]float32{0, 0, 0}
+	err := MarkCylinderArea(nil, &pos, 1, 1, 1, &CompactHeightfield{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ctx must not be nil")
+}
+
 // Helper function to check span properties
 func checkSpan(t *testing.T, span *Span, expectedSmin, expectedSmax uint32, expectedArea uint32, hasNext bool) {
 	assert.NotNil(t, span)
@@ -498,7 +751,9 @@ func TestRasterizeTriangles(t *testing.T) {
 	flagMergeThr := 1
 
 	t.Run("Rasterize some triangles", func(t *testing.T) {
-		assert.True(t, RasterizeTriangles(ctx, verts, 4, tris, areas, 2, &solid, flagMergeThr))
+		ok, err := RasterizeTriangles(ctx, verts, 4, tris, areas, 2, &solid, flagMergeThr)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check spans at specific positions
 		checkSpan(t, solid.Spans[0+0*width], 0, 1, 1, false)
@@ -519,7 +774,9 @@ func TestRasterizeTriangles(t *testing.T) {
 			0, 1, 2,
 			0, 3, 1,
 		}
-		assert.True(t, RasterizeTrianglesUShort(ctx, verts, 4, utris, areas, 2, &solid, flagMergeThr))
+		ok, err := RasterizeTrianglesUShort(ctx, verts, 4, utris, areas, 2, &solid, flagMergeThr)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check spans at specific positions
 		checkSpan(t, solid.Spans[0+0*width], 0, 1, 1, false)
@@ -545,7 +802,9 @@ func TestRasterizeTriangles(t *testing.T) {
 			1, 0, 0,
 		}
 
-		assert.True(t, RasterizeTrianglesVerts(ctx, vertsList, areas, 2, &solid, flagMergeThr))
+		ok, err := RasterizeTrianglesVerts(ctx, vertsList, areas, 2, &solid, flagMergeThr)
+		assert.True(t, ok)
+		assert.NoError(t, err)
 
 		// Check spans at specific positions
 		checkSpan(t, solid.Spans[0+0*width], 0, 1, 1, false)

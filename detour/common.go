@@ -1,5 +1,7 @@
 package detour
 
+import "math"
+
 // Vcross computes the cross product of two vectors (v1 x v2).
 func Vcross(dest, v1, v2 []float32) {
 	dest[0] = v1[1]*v2[2] - v1[2]*v2[1]
@@ -89,7 +91,7 @@ func Vcopy(dest, a []float32) {
 
 // Vlen computes the scalar length of a vector.
 func Vlen(v []float32) float32 {
-	return MathSqrtf(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])
+	return float32(math.Sqrt(float64(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])))
 }
 
 // VlenSqr computes the squared length of a vector.
@@ -102,7 +104,7 @@ func Vdist(v1, v2 []float32) float32 {
 	dx := v2[0] - v1[0]
 	dy := v2[1] - v1[1]
 	dz := v2[2] - v1[2]
-	return MathSqrtf(dx*dx + dy*dy + dz*dz)
+	return float32(math.Sqrt(float64(dx*dx + dy*dy + dz*dz)))
 }
 
 // VdistSqr computes the squared distance between two points.
@@ -117,7 +119,7 @@ func VdistSqr(v1, v2 []float32) float32 {
 func Vdist2D(v1, v2 []float32) float32 {
 	dx := v2[0] - v1[0]
 	dz := v2[2] - v1[2]
-	return MathSqrtf(dx*dx + dz*dz)
+	return float32(math.Sqrt(float64(dx*dx + dz*dz)))
 }
 
 // Vdist2DSqr computes the squared 2D distance on the xz-plane.
@@ -129,7 +131,7 @@ func Vdist2DSqr(v1, v2 []float32) float32 {
 
 // Vnormalize normalizes a vector.
 func Vnormalize(v []float32) {
-	d := 1.0 / MathSqrtf(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])
+	d := 1.0 / float32(math.Sqrt(float64(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])))
 	v[0] *= d
 	v[1] *= d
 	v[2] *= d
@@ -144,12 +146,15 @@ func Vequal(p0, p1 []float32) bool {
 
 // Visfinite checks that the vector's components are all finite.
 func Visfinite(v []float32) bool {
-	return MathIsfinite(v[0]) && MathIsfinite(v[1]) && MathIsfinite(v[2])
+	return !math.IsInf(float64(v[0]), 0) && !math.IsNaN(float64(v[0])) &&
+		!math.IsInf(float64(v[1]), 0) && !math.IsNaN(float64(v[1])) &&
+		!math.IsInf(float64(v[2]), 0) && !math.IsNaN(float64(v[2]))
 }
 
 // Visfinite2D checks that the vector's 2D components are finite.
 func Visfinite2D(v []float32) bool {
-	return MathIsfinite(v[0]) && MathIsfinite(v[2])
+	return !math.IsInf(float64(v[0]), 0) && !math.IsNaN(float64(v[0])) &&
+		!math.IsInf(float64(v[2]), 0) && !math.IsNaN(float64(v[2]))
 }
 
 // Vdot2D computes dot product on the xz-plane.
@@ -293,7 +298,7 @@ func IntersectSegmentPoly2D(p0, p1, verts []float32, nverts int) (bool, float32,
 		Vsub(diff, p0, verts[j*3:(j*3)+3])
 		n := Vperp2D(edge, diff)
 		d := Vperp2D(dir, edge)
-		if MathFabsf(d) < eps {
+		if float32(math.Abs(float64(d))) < eps {
 			if n < 0 {
 				return false, 0, 0, 0, 0
 			}
@@ -373,7 +378,7 @@ func ClosestHeightPointTriangle(p, a, b, c []float32) (bool, float32) {
 	Vsub(v2, p, a)
 
 	denom := v0[0]*v1[2] - v0[2]*v1[0]
-	if MathFabsf(denom) < eps {
+	if float32(math.Abs(float64(denom))) < eps {
 		return false, 0
 	}
 
@@ -497,7 +502,7 @@ func RandomPointInConvexPoly(pts []float32, npts int, areas []float32, s, t floa
 		acc += dacc
 	}
 
-	v := MathSqrtf(t)
+	v := float32(math.Sqrt(float64(t)))
 
 	a := 1 - v
 	b := (1 - u) * v
@@ -524,7 +529,7 @@ func IntersectSegSeg2D(ap, aq, bp, bq []float32) (bool, float32, float32) {
 	Vsub(v, bq, bp)
 	Vsub(w, ap, bp)
 	d := vperpXZ(u, v)
-	if MathFabsf(d) < 1e-6 {
+	if float32(math.Abs(float64(d))) < 1e-6 {
 		return false, 0, 0
 	}
 	s := vperpXZ(v, w) / d
@@ -646,7 +651,7 @@ func IntersectSegmentSeg2D(ap, aq, bp, bq []float32) (bool, float32, float32) {
 	v := []float32{bq[0] - bp[0], bq[1] - bp[1], bq[2] - bp[2]}
 	w := []float32{ap[0] - bp[0], ap[1] - bp[1], ap[2] - bp[2]}
 	d := Vperp2D(u, v)
-	if MathFabsf(d) < 1e-6 {
+	if float32(math.Abs(float64(d))) < 1e-6 {
 		return false, 0, 0
 	}
 	s := Vperp2D(v, w) / d

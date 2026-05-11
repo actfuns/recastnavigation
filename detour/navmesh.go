@@ -23,7 +23,7 @@ type NavMesh struct {
 	PolyBits    uint32
 }
 
-func (m *NavMesh) Init(params *NavMeshParams) Status {
+func (m *NavMesh) Init(params *NavMeshParams) error {
 	m.Params = *params
 	m.Orig = params.Orig
 	m.TileWidth = params.TileWidth
@@ -52,25 +52,27 @@ func (m *NavMesh) Init(params *NavMeshParams) Status {
 	m.TileBits = Ilog2(NextPow2(uint32(params.MaxTiles)))
 	m.PolyBits = Ilog2(NextPow2(uint32(params.MaxPolys)))
 
-	Assert(int(m.TileBits+m.PolyBits) <= 31)
+	if int(m.TileBits+m.PolyBits) > 31 {
+		return ErrInvalidParam
+	}
 
 	m.SaltBits = uint32(Min(31, 32-int(m.TileBits)-int(m.PolyBits)))
 
 	if m.SaltBits < 10 {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 
-	return Success
+	return nil
 }
 
 // InitSingleTile initializes the navigation mesh for single tile use.
-func (m *NavMesh) InitSingleTile(data []byte, flags int) Status {
+func (m *NavMesh) InitSingleTile(data []byte, flags int) error {
 	header := (*MeshHeader)(unsafe.Pointer(&data[0]))
 	if header.Magic != NavMeshMagic {
-		return Failure | WrongMagic
+		return ErrWrongMagic
 	}
 	if header.Version != NavMeshVersion {
-		return Failure | WrongVersion
+		return ErrWrongVersion
 	}
 
 	var params NavMeshParams
@@ -80,13 +82,13 @@ func (m *NavMesh) InitSingleTile(data []byte, flags int) Status {
 	params.MaxTiles = 1
 	params.MaxPolys = header.PolyCount
 
-	status := m.Init(&params)
-	if StatusFailed(status) {
-		return status
+	err := m.Init(&params)
+	if err != nil {
+		return err
 	}
 
-	_, status = m.AddTile(data, flags, 0)
-	return status
+	_, err = m.AddTile(data, flags, 0)
+	return err
 }
 
 // GetParams returns the navigation mesh initialization params.
@@ -722,24 +724,24 @@ func (m *NavMesh) queryPolygonsInTile(tile *MeshTile, qmin, qmax []float32, poly
 }
 
 // AddTile adds a tile to the navigation mesh.
-func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, Status) {
+func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, error) {
 	if len(data) < int(unsafeSizeOfMeshHeader()) {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	header := (*MeshHeader)(unsafe.Pointer(&data[0]))
 	if header.Magic != NavMeshMagic {
-		return 0, Failure | WrongMagic
+		return 0, ErrWrongMagic
 	}
 	if header.Version != NavMeshVersion {
-		return 0, Failure | WrongVersion
+		return 0, ErrWrongVersion
 	}
 
 	if m.PolyBits < Ilog2(NextPow2(uint32(header.PolyCount))) {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 
 	if m.GetTileAt(int(header.X), int(header.Y), int(header.Layer)) != nil {
-		return 0, Failure | AlreadyOccupied
+		return 0, ErrAlreadyOccupied
 	}
 
 	var tile *MeshTile
@@ -752,7 +754,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, Sta
 	} else {
 		tileIndex := int(m.DecodePolyIdTile(PolyRef(lastRef)))
 		if tileIndex >= m.MaxTiles {
-			return 0, Failure | OutOfMemory
+			return 0, ErrOutOfMemory
 		}
 		target := &m.Tiles[tileIndex]
 		var prev *MeshTile
@@ -762,7 +764,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, Sta
 			tile = tile.Next
 		}
 		if tile != target {
-			return 0, Failure | OutOfMemory
+			return 0, ErrOutOfMemory
 		}
 		if prev == nil {
 			m.NextFree = tile.Next
@@ -773,7 +775,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, Sta
 	}
 
 	if tile == nil {
-		return 0, Failure | OutOfMemory
+		return 0, ErrOutOfMemory
 	}
 
 	h := computeTileHash(int(header.X), int(header.Y), m.TileLutMask)
@@ -859,7 +861,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, Sta
 	}
 
 	result := m.GetTileRef(tile)
-	return result, Success
+	return result, nil
 }
 
 // binary reader helpers using unsafe.Sizeof
@@ -1112,21 +1114,21 @@ func (m *NavMesh) CalcTileLoc(pos []float32) (int, int) {
 }
 
 // GetTileAndPolyByRef gets the tile and polygon for the specified polygon reference.
-func (m *NavMesh) GetTileAndPolyByRef(ref PolyRef) (*MeshTile, *Poly, Status) {
+func (m *NavMesh) GetTileAndPolyByRef(ref PolyRef) (*MeshTile, *Poly, error) {
 	if ref == 0 {
-		return nil, nil, Failure
+		return nil, nil, ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int(it) >= m.MaxTiles {
-		return nil, nil, Failure | InvalidParam
+		return nil, nil, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return nil, nil, Failure | InvalidParam
+		return nil, nil, ErrInvalidParam
 	}
 	if int(ip) >= int(m.Tiles[it].Header.PolyCount) {
-		return nil, nil, Failure | InvalidParam
+		return nil, nil, ErrInvalidParam
 	}
-	return &m.Tiles[it], &m.Tiles[it].Polys[ip], Success
+	return &m.Tiles[it], &m.Tiles[it].Polys[ip], nil
 }
 
 // GetTileAndPolyByRefUnsafe returns the tile and polygon for the specified polygon reference (no validation).
@@ -1172,26 +1174,26 @@ func (m *NavMesh) GetPolyRefBase(tile *MeshTile) PolyRef {
 }
 
 // GetOffMeshConnectionPolyEndPoints gets the end points of an off-mesh connection.
-func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, startPos, endPos []float32) Status {
+func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, startPos, endPos []float32) error {
 	if polyRef == 0 {
-		return Failure
+		return ErrFailure
 	}
 
 	salt, it, ip := m.DecodePolyID(polyRef)
 	if int(it) >= m.MaxTiles {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	tile := &m.Tiles[it]
 	if int(ip) >= int(tile.Header.PolyCount) {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	poly := &tile.Polys[ip]
 
 	if poly.GetType() != PolyTypeOffMeshConnection {
-		return Failure
+		return ErrFailure
 	}
 
 	idx0, idx1 := 0, 1
@@ -1209,7 +1211,7 @@ func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef, st
 	Vcopy(startPos, tile.Verts[poly.Verts[idx0]*3:poly.Verts[idx0]*3+3])
 	Vcopy(endPos, tile.Verts[poly.Verts[idx1]*3:poly.Verts[idx1]*3+3])
 
-	return Success
+	return nil
 }
 
 // GetOffMeshConnectionByRef gets the specified off-mesh connection.
@@ -1236,90 +1238,92 @@ func (m *NavMesh) GetOffMeshConnectionByRef(ref PolyRef) *OffMeshConnection {
 	}
 
 	idx := ip - uint32(tile.Header.OffMeshBase)
-	Assert(int(idx) < int(tile.Header.OffMeshConCount))
+	if int(idx) >= int(tile.Header.OffMeshConCount) {
+		return nil
+	}
 	return &tile.OffMeshCons[idx]
 }
 
 // SetPolyFlags sets the user defined flags for the specified polygon.
-func (m *NavMesh) SetPolyFlags(ref PolyRef, flags uint16) Status {
+func (m *NavMesh) SetPolyFlags(ref PolyRef, flags uint16) error {
 	if ref == 0 {
-		return Failure
+		return ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int(it) >= m.MaxTiles {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	tile := &m.Tiles[it]
 	if int(ip) >= int(tile.Header.PolyCount) {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	poly := &tile.Polys[ip]
 	poly.Flags = flags
-	return Success
+	return nil
 }
 
 // GetPolyFlags gets the user defined flags for the specified polygon.
-func (m *NavMesh) GetPolyFlags(ref PolyRef) (uint16, Status) {
+func (m *NavMesh) GetPolyFlags(ref PolyRef) (uint16, error) {
 	if ref == 0 {
-		return 0, Failure
+		return 0, ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int(it) >= m.MaxTiles {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	tile := &m.Tiles[it]
 	if int(ip) >= int(tile.Header.PolyCount) {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	poly := &tile.Polys[ip]
-	return poly.Flags, Success
+	return poly.Flags, nil
 }
 
 // SetPolyArea sets the user defined area for the specified polygon.
-func (m *NavMesh) SetPolyArea(ref PolyRef, area uint8) Status {
+func (m *NavMesh) SetPolyArea(ref PolyRef, area uint8) error {
 	if ref == 0 {
-		return Failure
+		return ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int(it) >= m.MaxTiles {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	tile := &m.Tiles[it]
 	if int(ip) >= int(tile.Header.PolyCount) {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 	poly := &tile.Polys[ip]
 	poly.SetArea(area)
-	return Success
+	return nil
 }
 
 // GetPolyArea gets the user defined area for the specified polygon.
-func (m *NavMesh) GetPolyArea(ref PolyRef) (uint8, Status) {
+func (m *NavMesh) GetPolyArea(ref PolyRef) (uint8, error) {
 	if ref == 0 {
-		return 0, Failure
+		return 0, ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int(it) >= m.MaxTiles {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	tile := &m.Tiles[it]
 	if int(ip) >= int(tile.Header.PolyCount) {
-		return 0, Failure | InvalidParam
+		return 0, ErrInvalidParam
 	}
 	poly := &tile.Polys[ip]
-	return poly.GetArea(), Success
+	return poly.GetArea(), nil
 }
 
 // GetTileStateSize returns the size of the buffer required to store the tile's state.
@@ -1349,10 +1353,10 @@ func unsafeSizeOfTileState() uintptr { return unsafe.Sizeof(TileState{}) }
 func unsafeSizeOfPolyState() uintptr { return unsafe.Sizeof(PolyState{}) }
 
 // StoreTileState stores the non-structural state of the tile.
-func (m *NavMesh) StoreTileState(tile *MeshTile, data []byte, maxDataSize int) Status {
+func (m *NavMesh) StoreTileState(tile *MeshTile, data []byte, maxDataSize int) error {
 	sizeReq := m.GetTileStateSize(tile)
 	if maxDataSize < sizeReq {
-		return Failure | BufferTooSmall
+		return ErrBufferTooSmall
 	}
 
 	offset := 0
@@ -1373,14 +1377,14 @@ func (m *NavMesh) StoreTileState(tile *MeshTile, data []byte, maxDataSize int) S
 		offset += int(unsafeSizeOfPolyState())
 	}
 
-	return Success
+	return nil
 }
 
 // RestoreTileState restores the state of the tile.
-func (m *NavMesh) RestoreTileState(tile *MeshTile, data []byte, maxDataSize int) Status {
+func (m *NavMesh) RestoreTileState(tile *MeshTile, data []byte, maxDataSize int) error {
 	sizeReq := m.GetTileStateSize(tile)
 	if maxDataSize < sizeReq {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 
 	offset := 0
@@ -1388,13 +1392,13 @@ func (m *NavMesh) RestoreTileState(tile *MeshTile, data []byte, maxDataSize int)
 	offset += Align4(int(unsafeSizeOfTileState()))
 
 	if tileState.Magic != NavMeshStateMagic {
-		return Failure | WrongMagic
+		return ErrWrongMagic
 	}
 	if tileState.Version != NavMeshStateVersion {
-		return Failure | WrongVersion
+		return ErrWrongVersion
 	}
 	if tileState.Ref != m.GetTileRef(tile) {
-		return Failure | InvalidParam
+		return ErrInvalidParam
 	}
 
 	for i := 0; i < int(tile.Header.PolyCount); i++ {
@@ -1405,7 +1409,7 @@ func (m *NavMesh) RestoreTileState(tile *MeshTile, data []byte, maxDataSize int)
 		p.SetArea(ps.Area)
 	}
 
-	return Success
+	return nil
 }
 
 func writeTileState(data []byte, ts *TileState) {
@@ -1435,18 +1439,18 @@ func readPolyState(data []byte) PolyState {
 }
 
 // RemoveTile removes the specified tile.
-func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, Status) {
+func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, error) {
 	if ref == 0 {
-		return nil, Failure | InvalidParam
+		return nil, ErrInvalidParam
 	}
 	tileIndex := int(m.DecodePolyIdTile(PolyRef(ref)))
 	tileSalt := uint32(m.DecodePolyIdSalt(PolyRef(ref)))
 	if tileIndex >= m.MaxTiles {
-		return nil, Failure | InvalidParam
+		return nil, ErrInvalidParam
 	}
 	tile := &m.Tiles[tileIndex]
 	if tile.Salt != tileSalt {
-		return nil, Failure | InvalidParam
+		return nil, ErrInvalidParam
 	}
 
 	// Remove from hash lookup
@@ -1513,7 +1517,7 @@ func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, Status) {
 	tile.Next = m.NextFree
 	m.NextFree = tile
 
-	return oldData, Success
+	return oldData, nil
 }
 
 // GetTileRef returns the tile reference for the given tile.

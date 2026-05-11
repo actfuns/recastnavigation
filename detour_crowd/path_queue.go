@@ -1,5 +1,8 @@
 package detour_crowd
 
+import "errors"
+import "github.com/actfuns/recastnavigation/detour"
+
 const pathQueueMaxQueue = 8
 
 // PathQueueRef is a reference to a path query in the queue.
@@ -20,7 +23,7 @@ type pathQuery struct {
 	startRef, endRef PolyRef
 	path             []PolyRef
 	npath            int
-	status           Status
+	err              error
 	keepAlive        int
 	filter           *QueryFilter
 }
@@ -62,30 +65,30 @@ func (q *PathQueue) Update(maxIters int) {
 		}
 
 		// Handle completed request.
-		if StatusSucceed(pq.status) || StatusFailed(pq.status) {
+		if pq.err == nil || pq.err != nil {
 			pq.keepAlive++
 			if pq.keepAlive > maxKeepAlive {
 				pq.ref = 0
-				pq.status = 0
+				pq.err = nil
 			}
 			q.queueHead++
 			continue
 		}
 
 		// Handle query start.
-		if pq.status == 0 {
-			pq.status = q.navquery.InitSlicedFindPath(pq.startRef, pq.endRef, pq.startPos, pq.endPos, pq.filter)
+		if pq.err == nil {
+			pq.err = q.navquery.InitSlicedFindPath(pq.startRef, pq.endRef, pq.startPos, pq.endPos, pq.filter)
 		}
 
 		// Handle query in progress.
-		if StatusInProgressFlag(pq.status) {
+		if errors.Is(pq.err, detour.ErrInProgress) {
 			var iters int
-			pq.status = q.navquery.UpdateSlicedFindPath(iterCount, &iters)
+			pq.err = q.navquery.UpdateSlicedFindPath(iterCount, &iters)
 			iterCount -= iters
 		}
 
-		if StatusSucceed(pq.status) {
-			pq.status = q.navquery.FinalizeSlicedFindPath(pq.path, &pq.npath, q.maxPathSize)
+		if pq.err == nil {
+			pq.err = q.navquery.FinalizeSlicedFindPath(pq.path, &pq.npath, q.maxPathSize)
 		}
 
 		if iterCount <= 0 {
@@ -122,7 +125,7 @@ func (q *PathQueue) Request(startRef, endRef PolyRef, startPos, endPos *[3]float
 	pq.startRef = startRef
 	pq.endPos = *endPos
 	pq.endRef = endRef
-	pq.status = 0
+	pq.err = nil
 	pq.npath = 0
 	pq.filter = filter
 	pq.keepAlive = 0
@@ -130,33 +133,36 @@ func (q *PathQueue) Request(startRef, endRef PolyRef, startPos, endPos *[3]float
 	return ref
 }
 
-// GetRequestStatus gets the status of a pathfinding request.
-func (q *PathQueue) GetRequestStatus(ref PathQueueRef) Status {
+// GetRequestErr gets the err of a pathfinding request.
+func (q *PathQueue) GetRequestErr(ref PathQueueRef) error {
 	for i := 0; i < pathQueueMaxQueue; i++ {
 		if q.queue[i].ref == ref {
-			return q.queue[i].status
+			return q.queue[i].err
 		}
 	}
-	return StatusFailure
+	return detour.ErrFailure
 }
 
 // GetPathResult gets the result of a completed pathfinding request.
-func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, pathSize *int, maxPath int) Status {
+func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, pathSize *int, maxPath int) error {
 	for i := 0; i < pathQueueMaxQueue; i++ {
 		if q.queue[i].ref == ref {
 			pq := &q.queue[i]
-			details := pq.status & StatusDetailMask
+			details := errors.Is(pq.err, detour.ErrPartialResult)
 			// Free request for reuse.
 			pq.ref = 0
-			pq.status = 0
+			pq.err = nil
 			// Copy path
 			n := recastMin(pq.npath, maxPath)
 			copy(path[:n], pq.path[:n])
 			*pathSize = n
-			return details | StatusSuccess
+			if details {
+				return detour.ErrPartialResult
+			}
+			return nil
 		}
 	}
-	return StatusFailure
+	return detour.ErrFailure
 }
 
 // GetNavQuery returns the navigation mesh query used by the path queue.

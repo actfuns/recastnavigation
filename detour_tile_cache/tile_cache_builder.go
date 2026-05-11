@@ -1,6 +1,7 @@
 package detour_tile_cache
 
 import (
+	"github.com/actfuns/recastnavigation/detour"
 	"math"
 	"unsafe"
 )
@@ -51,7 +52,7 @@ func AllocTileCachePolyMesh(alloc TileCacheAlloc) *TileCachePolyMesh {
 
 // BuildTileCacheLayer compresses a tile cache layer into a byte buffer.
 func BuildTileCacheLayer(comp TileCacheCompressor, header *TileCacheLayerHeader,
-	heights, areas, cons []uint8) ([]uint8, int, Status) {
+	heights, areas, cons []uint8) ([]uint8, int, error) {
 
 	headerSize := TileCacheLayerHeaderSize()
 	gridSize := int(header.Width) * int(header.Height)
@@ -73,12 +74,12 @@ func BuildTileCacheLayer(comp TileCacheCompressor, header *TileCacheLayerHeader,
 	// Compress
 	compressed := data[headerSize:]
 	var compressedSize int
-	status := comp.Compress(buffer, compressed, &compressedSize)
-	if StatusFailed(status) {
-		return nil, 0, status
+	err := comp.Compress(buffer, compressed, &compressedSize)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	return data, headerSize + compressedSize, StatusSuccess
+	return data, headerSize + compressedSize, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -96,18 +97,18 @@ func FreeTileCacheLayer(alloc TileCacheAlloc, layer *TileCacheLayer) {
 
 // DecompressTileCacheLayer decompresses a tile cache layer.
 func DecompressTileCacheLayer(alloc TileCacheAlloc, comp TileCacheCompressor,
-	compressed []uint8, compressedSize int) (*TileCacheLayer, Status) {
+	compressed []uint8, compressedSize int) (*TileCacheLayer, error) {
 
 	if len(compressed) < TileCacheLayerHeaderSize() {
-		return nil, StatusFailure | StatusInvalidParam
+		return nil, detour.ErrInvalidParam
 	}
 
 	compressedHeader := (*TileCacheLayerHeader)(unsafe.Pointer(&compressed[0]))
 	if compressedHeader.Magic != TileCacheMagic {
-		return nil, StatusFailure | StatusWrongMagic
+		return nil, detour.ErrWrongMagic
 	}
 	if compressedHeader.Version != TileCacheVersion {
-		return nil, StatusFailure | StatusWrongVersion
+		return nil, detour.ErrWrongVersion
 	}
 
 	layerSize := Align4(int(unsafe.Sizeof(TileCacheLayer{})))
@@ -117,7 +118,7 @@ func DecompressTileCacheLayer(alloc TileCacheAlloc, comp TileCacheCompressor,
 
 	buffer := alloc.Alloc(bufferSize)
 	if buffer == nil {
-		return nil, StatusFailure | StatusOutOfMemory
+		return nil, detour.ErrOutOfMemory
 	}
 
 	// Zero fill
@@ -134,10 +135,10 @@ func DecompressTileCacheLayer(alloc TileCacheAlloc, comp TileCacheCompressor,
 
 	// Decompress grid
 	var size int
-	status := comp.Decompress(compressed[headerSize:compressedSize], grids, &size)
-	if StatusFailed(status) {
+	err := comp.Decompress(compressed[headerSize:compressedSize], grids, &size)
+	if err != nil {
 		alloc.Free(buffer)
-		return nil, status
+		return nil, err
 	}
 
 	layer.Header = header
@@ -146,7 +147,7 @@ func DecompressTileCacheLayer(alloc TileCacheAlloc, comp TileCacheCompressor,
 	layer.Cons = grids[gridSize*2 : gridSize*3]
 	layer.Regs = grids[gridSize*3:]
 
-	return layer, StatusSuccess
+	return layer, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +171,7 @@ type dtLayerMonotoneRegion struct {
 }
 
 // BuildTileCacheRegions partitions walkable area into monotone regions.
-func BuildTileCacheRegions(alloc TileCacheAlloc, layer *TileCacheLayer, walkableClimb int) Status {
+func BuildTileCacheRegions(alloc TileCacheAlloc, layer *TileCacheLayer, walkableClimb int) error {
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
 
@@ -246,7 +247,7 @@ func BuildTileCacheRegions(alloc TileCacheAlloc, layer *TileCacheLayer, walkable
 				sweeps[i].id = sweeps[i].nei
 			} else {
 				if regId == 255 {
-					return StatusFailure | StatusBufferTooSmall
+					return detour.ErrBufferTooSmall
 				}
 				sweeps[i].id = regId
 				regId++
@@ -355,7 +356,7 @@ func BuildTileCacheRegions(alloc TileCacheAlloc, layer *TileCacheLayer, walkable
 		}
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +380,7 @@ type rcEdge struct {
 
 // BuildTileCacheContours builds contours from a tile cache layer.
 func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
-	walkableClimb int, maxError float32, lcset *TileCacheContourSet) Status {
+	walkableClimb int, maxError float32, lcset *TileCacheContourSet) error {
 
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
@@ -392,13 +393,13 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 
 	tempVerts := alloc.Alloc(maxTempVerts * 4)
 	if tempVerts == nil {
-		return StatusFailure | StatusOutOfMemory
+		return detour.ErrOutOfMemory
 	}
 	defer alloc.Free(tempVerts)
 
 	tempPolyBytes := alloc.Alloc(maxTempVerts * 2)
 	if tempPolyBytes == nil {
-		return StatusFailure | StatusOutOfMemory
+		return detour.ErrOutOfMemory
 	}
 	defer alloc.Free(tempPolyBytes)
 
@@ -429,7 +430,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 			cont.Area = layer.Areas[idx]
 
 			if !walkContour(layer, x, y, &temp) {
-				return StatusFailure | StatusBufferTooSmall
+				return detour.ErrBufferTooSmall
 			}
 
 			simplifyContour(&temp, maxError)
@@ -439,7 +440,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 			if cont.NVerts > 0 {
 				cont.Verts = alloc.Alloc(4 * temp.nverts)
 				if cont.Verts == nil {
-					return StatusFailure | StatusOutOfMemory
+					return detour.ErrOutOfMemory
 				}
 
 				for i, j := 0, temp.nverts-1; i < temp.nverts; j, i = i, i+1 {
@@ -455,7 +456,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 					dst[1] = lh
 					dst[2] = v[2]
 
-					// Store portal direction and remove status to the fourth component.
+					// Store portal direction and remove err to the fourth component.
 					dst[3] = 0x0f
 					if nei != 0xff && nei >= 0xf8 {
 						dst[3] = nei - 0xf8
@@ -468,7 +469,7 @@ func BuildTileCacheContours(alloc TileCacheAlloc, layer *TileCacheLayer,
 		}
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +512,7 @@ func addVertex(x, y, z uint16, verts []uint16, firstVert []uint16, nextVert []ui
 }
 
 // BuildTileCachePolyMesh builds a polygon mesh from a contour set.
-func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, mesh *TileCachePolyMesh) Status {
+func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, mesh *TileCachePolyMesh) error {
 	maxVertices := 0
 	maxTris := 0
 	maxVertsPerCont := 0
@@ -641,7 +642,7 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 			mesh.Areas[mesh.NPolys] = cont.Area
 			mesh.NPolys++
 			if mesh.NPolys > maxTris {
-				return StatusFailure | StatusBufferTooSmall
+				return detour.ErrBufferTooSmall
 			}
 		}
 	}
@@ -652,9 +653,9 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 			if !canRemoveVertex(mesh, uint16(i)) {
 				continue
 			}
-			status := removeVertex(mesh, uint16(i), maxTris)
-			if StatusFailed(status) {
-				return status
+			err := removeVertex(mesh, uint16(i), maxTris)
+			if err != nil {
+				return err
 			}
 			// Remove vertex - mesh.NVerts is already decremented inside removeVertex()
 			for j := i; j < mesh.NVerts; j++ {
@@ -666,10 +667,10 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 
 	// Calculate adjacency.
 	if !buildMeshAdjacency(mesh.Polys, mesh.NPolys, mesh.Verts, mesh.NVerts, lcset) {
-		return StatusFailure | StatusOutOfMemory
+		return detour.ErrOutOfMemory
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -678,7 +679,7 @@ func BuildTileCachePolyMesh(alloc TileCacheAlloc, lcset *TileCacheContourSet, me
 
 // MarkCylinderArea marks a cylindrical area in the tile cache layer.
 func MarkCylinderArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
-	pos *[3]float32, radius, height float32, areaId uint8) Status {
+	pos *[3]float32, radius, height float32, areaId uint8) error {
 
 	var bmin, bmax [3]float32
 	bmin[0] = pos[0] - radius
@@ -706,7 +707,7 @@ func MarkCylinderArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
 	maxz := int(math.Floor(float64((bmax[2] - orig[2]) * ics)))
 
 	if maxx < 0 || minx >= w || maxz < 0 || minz >= h {
-		return StatusSuccess
+		return nil
 	}
 
 	if minx < 0 {
@@ -737,12 +738,12 @@ func MarkCylinderArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
 		}
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // MarkBoxArea marks an axis-aligned box area in the tile cache layer.
 func MarkBoxArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
-	bmin, bmax *[3]float32, areaId uint8) Status {
+	bmin, bmax *[3]float32, areaId uint8) error {
 
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
@@ -757,7 +758,7 @@ func MarkBoxArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
 	maxz := int(math.Floor(float64((bmax[2] - orig[2]) * ics)))
 
 	if maxx < 0 || minx >= w || maxz < 0 || minz >= h {
-		return StatusSuccess
+		return nil
 	}
 
 	if minx < 0 {
@@ -783,12 +784,12 @@ func MarkBoxArea(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
 		}
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // MarkBoxAreaOriented marks an oriented box area in the tile cache layer.
 func MarkBoxAreaOriented(layer *TileCacheLayer, orig *[3]float32, cs, ch float32,
-	center, halfExtents *[3]float32, rotAux *[2]float32, areaId uint8) Status {
+	center, halfExtents *[3]float32, rotAux *[2]float32, areaId uint8) error {
 
 	w := int(layer.Header.Width)
 	h := int(layer.Header.Height)
@@ -807,7 +808,7 @@ func MarkBoxAreaOriented(layer *TileCacheLayer, orig *[3]float32, cs, ch float32
 	maxy := int(math.Floor(float64((center[1] + halfExtents[1] - orig[1]) * ich)))
 
 	if maxx < 0 || minx >= w || maxz < 0 || minz >= h {
-		return StatusSuccess
+		return nil
 	}
 
 	if minx < 0 {
@@ -846,7 +847,7 @@ func MarkBoxAreaOriented(layer *TileCacheLayer, orig *[3]float32, cs, ch float32
 		}
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1819,7 +1820,7 @@ func canRemoveVertex(mesh *TileCachePolyMesh, rem uint16) bool {
 	return numOpenEdges <= 2
 }
 
-func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
+func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) error {
 	nedges := 0
 	var edges [maxRemEdges * 3]uint16
 	nhole := 0
@@ -1841,7 +1842,7 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
 			for j, k := 0, nv-1; j < nv; k, j = j, j+1 {
 				if p[j] != rem && p[k] != rem {
 					if nedges >= maxRemEdges {
-						return StatusFailure | StatusBufferTooSmall
+						return detour.ErrBufferTooSmall
 					}
 					e := edges[nedges*3:]
 					e[0] = p[k]
@@ -1890,7 +1891,7 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
 	}
 
 	if nedges == 0 {
-		return StatusSuccess
+		return nil
 	}
 
 	pushBack(edges[0], hole[:], &nhole)
@@ -1906,14 +1907,14 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
 			add := false
 			if hole[0] == eb {
 				if nhole >= maxRemEdges {
-					return StatusFailure | StatusBufferTooSmall
+					return detour.ErrBufferTooSmall
 				}
 				pushFront(ea, hole[:], &nhole)
 				pushFront(a, harea[:], &nharea)
 				add = true
 			} else if hole[nhole-1] == ea {
 				if nhole >= maxRemEdges {
-					return StatusFailure | StatusBufferTooSmall
+					return detour.ErrBufferTooSmall
 				}
 				pushBack(eb, hole[:], &nhole)
 				pushBack(a, harea[:], &nharea)
@@ -1953,7 +1954,7 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
 	}
 
 	if ntris > maxRemEdges {
-		return StatusFailure | StatusBufferTooSmall
+		return detour.ErrBufferTooSmall
 	}
 
 	var polys [maxRemEdges * maxVertsPerPoly]uint16
@@ -1974,7 +1975,7 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
 		}
 	}
 	if npolys == 0 {
-		return StatusSuccess
+		return nil
 	}
 
 	// Merge polygons.
@@ -2028,11 +2029,11 @@ func removeVertex(mesh *TileCachePolyMesh, rem uint16, maxTris int) Status {
 		mesh.Areas[mesh.NPolys] = pareas[i]
 		mesh.NPolys++
 		if mesh.NPolys > maxTris {
-			return StatusFailure | StatusBufferTooSmall
+			return detour.ErrBufferTooSmall
 		}
 	}
 
-	return StatusSuccess
+	return nil
 }
 
 // Constants from the C++ builder

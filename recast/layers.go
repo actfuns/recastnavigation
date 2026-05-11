@@ -2,14 +2,14 @@ package recast
 
 // Constants for layer building.
 const (
-	rcMaxLayersDef = 63
-	rcMaxNeisDef   = 16
+	maxLayersDef = 63
+	maxNeisDef   = 16
 )
 
 // LayerRegion stores region data for layer building.
 type LayerRegion struct {
-	layers  [rcMaxLayersDef]uint8
-	neis    [rcMaxNeisDef]uint8
+	layers  [maxLayersDef]uint8
+	neis    [maxNeisDef]uint8
 	ymin    uint16
 	ymax    uint16
 	layerID uint8 // Layer ID
@@ -85,10 +85,10 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 				var sid uint8 = 0xff
 
 				// -x
-				if GetCon(&s, 0) != notConnected {
-					ax := x + GetDirOffsetX(0)
-					ay := y + GetDirOffsetZ(0)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 0)
+				if Con(&s, 0) != notConnected {
+					ax := x + DirOffsetX(0)
+					ay := y + DirOffsetZ(0)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 0)
 					if chf.Areas[ai] != nullArea && srcReg[ai] != 0xff {
 						sid = srcReg[ai]
 					}
@@ -102,10 +102,10 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 				}
 
 				// -y
-				if GetCon(&s, 3) != notConnected {
-					ax := x + GetDirOffsetX(3)
-					ay := y + GetDirOffsetZ(3)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 3)
+				if Con(&s, 3) != notConnected {
+					ax := x + DirOffsetX(3)
+					ay := y + DirOffsetZ(3)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 3)
 					nr := srcReg[ai]
 					if nr != 0xff {
 						if sweeps[sid].ns == 0 {
@@ -130,7 +130,7 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 				sweeps[i].id = sweeps[i].nei
 			} else {
 				if regID == 255 {
-					ctx.Log(LogError, "rcBuildHeightfieldLayers: Region ID overflow.")
+					ctx.Log(LogError, "BuildHeightfieldLayers: Region ID overflow.")
 					return false
 				}
 				sweeps[i].id = regID
@@ -160,7 +160,7 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 		for x := 0; x < w; x++ {
 			c := chf.Cells[x+y*w]
 
-			var lregs [rcMaxLayersDef]uint8
+			var lregs [maxLayersDef]uint8
 			nlregs := 0
 
 			for i := int(c.Index); i < int(c.Index+c.Count); i++ {
@@ -173,19 +173,19 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 				regs[ri].ymin = minU16(regs[ri].ymin, s.Y)
 				regs[ri].ymax = maxU16(regs[ri].ymax, s.Y)
 
-				if nlregs < rcMaxLayersDef {
+				if nlregs < maxLayersDef {
 					lregs[nlregs] = ri
 					nlregs++
 				}
 
 				for dir := 0; dir < 4; dir++ {
-					if GetCon(&s, dir) != notConnected {
-						ax := x + GetDirOffsetX(dir)
-						ay := y + GetDirOffsetZ(dir)
-						ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+					if Con(&s, dir) != notConnected {
+						ax := x + DirOffsetX(dir)
+						ay := y + DirOffsetZ(dir)
+						ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 						rai := srcReg[ai]
 						if rai != 0xff && rai != ri {
-							addUniqueArray(regs[ri].neis[:], &regs[ri].nneis, rcMaxNeisDef, rai)
+							addUniqueArray(regs[ri].neis[:], &regs[ri].nneis, maxNeisDef, rai)
 						}
 					}
 				}
@@ -197,9 +197,9 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 						ri := &regs[lregs[i]]
 						rj := &regs[lregs[j]]
 
-						if !addUniqueArray(ri.layers[:], &ri.nlayers, rcMaxLayersDef, lregs[j]) ||
-							!addUniqueArray(rj.layers[:], &rj.nlayers, rcMaxLayersDef, lregs[i]) {
-							ctx.Log(LogError, "rcBuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing RC_MAX_LAYERS.")
+						if !addUniqueArray(ri.layers[:], &ri.nlayers, maxLayersDef, lregs[j]) ||
+							!addUniqueArray(rj.layers[:], &rj.nlayers, maxLayersDef, lregs[i]) {
+							ctx.Log(LogError, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
 							return false
 						}
 					}
@@ -256,8 +256,8 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 
 					regn.layerID = layerID
 					for k := 0; k < int(regn.nlayers); k++ {
-						if !addUniqueArray(root.layers[:], &root.nlayers, rcMaxLayersDef, regn.layers[k]) {
-							ctx.Log(LogError, "rcBuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing RC_MAX_LAYERS.")
+						if !addUniqueArray(root.layers[:], &root.nlayers, maxLayersDef, regn.layers[k]) {
+							ctx.Log(LogError, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
 							return false
 						}
 					}
@@ -329,8 +329,8 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 					rj.base = 0
 					rj.layerID = newID
 					for k := 0; k < int(rj.nlayers); k++ {
-						if !addUniqueArray(ri.layers[:], &ri.nlayers, rcMaxLayersDef, rj.layers[k]) {
-							ctx.Log(LogError, "rcBuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing RC_MAX_LAYERS.")
+						if !addUniqueArray(ri.layers[:], &ri.nlayers, maxLayersDef, rj.layers[k]) {
+							ctx.Log(LogError, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
 							return false
 						}
 					}
@@ -447,10 +447,10 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 					var portal uint8 = 0
 					var con uint8 = 0
 					for dir := 0; dir < 4; dir++ {
-						if GetCon(&s, dir) != notConnected {
-							ax := cx + GetDirOffsetX(dir)
-							ay := cy + GetDirOffsetZ(dir)
-							ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+						if Con(&s, dir) != notConnected {
+							ax := cx + DirOffsetX(dir)
+							ay := cy + DirOffsetZ(dir)
+							ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 							alid := uint8(0xff)
 							if srcReg[ai] != 0xff {
 								alid = regs[srcReg[ai]].layerID

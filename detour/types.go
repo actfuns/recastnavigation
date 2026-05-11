@@ -1,7 +1,5 @@
 package detour
 
-import "math"
-
 // PolyRef is a handle to a polygon within a navigation mesh tile.
 type PolyRef uint32
 
@@ -90,7 +88,7 @@ const (
 // NodeIndex type
 type NodeIndex uint16
 
-// Poly is a polygon within a dtMeshTile object.
+// Poly is a polygon within a MeshTile object.
 type Poly struct {
 	FirstLink   uint32
 	Verts       [VertsPerPolygon]uint16
@@ -116,7 +114,7 @@ func (p *Poly) GetType() uint8 {
 	return p.areaAndtype >> 6
 }
 
-// PolyDetail defines the location of detail sub-mesh data within a dtMeshTile.
+// PolyDetail defines the location of detail sub-mesh data within a MeshTile.
 type PolyDetail struct {
 	VertBase  uint32
 	TriBase   uint32
@@ -151,7 +149,7 @@ type OffMeshConnection struct {
 	UserID uint32
 }
 
-// MeshHeader provides high level information related to a dtMeshTile object.
+// MeshHeader provides high level information related to a MeshTile object.
 type MeshHeader struct {
 	Magic           int32
 	Version         int32
@@ -231,7 +229,7 @@ const (
 
 // QueryData is used for sliced path queries.
 type QueryData struct {
-	Status           Status
+	Err              error
 	LastBestNode     *Node
 	LastBestNodeCost float32
 	StartRef         PolyRef
@@ -245,37 +243,3 @@ type QueryData struct {
 
 // H_SCALE is the search heuristic scale.
 const H_SCALE = 0.999
-
-// Math utility functions
-
-func MathFabsf(x float32) float32 {
-	return float32(math.Abs(float64(x)))
-}
-
-func MathSqrtf(x float32) float32 {
-	return float32(math.Sqrt(float64(x)))
-}
-
-func MathFloorf(x float32) float32 {
-	return float32(math.Floor(float64(x)))
-}
-
-func MathCeilf(x float32) float32 {
-	return float32(math.Ceil(float64(x)))
-}
-
-func MathCosf(x float32) float32 {
-	return float32(math.Cos(float64(x)))
-}
-
-func MathSinf(x float32) float32 {
-	return float32(math.Sin(float64(x)))
-}
-
-func MathAtan2f(y, x float32) float32 {
-	return float32(math.Atan2(float64(y), float64(x)))
-}
-
-func MathIsfinite(x float32) bool {
-	return !math.IsInf(float64(x), 0) && !math.IsNaN(float64(x))
-}

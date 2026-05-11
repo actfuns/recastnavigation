@@ -613,33 +613,33 @@ func getCornerHeight(x, y, i, dir int, chf *CompactHeightfield, isBorderVertex *
 	var regs [4]uint32
 	regs[0] = uint32(chf.Spans[i].Reg) | (uint32(chf.Areas[i]) << 16)
 
-	if GetCon(&s, dir) != notConnected {
-		ax := x + GetDirOffsetX(dir)
-		ay := y + GetDirOffsetZ(dir)
-		ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&s, dir)
+	if Con(&s, dir) != notConnected {
+		ax := x + DirOffsetX(dir)
+		ay := y + DirOffsetZ(dir)
+		ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&s, dir)
 		as := chf.Spans[ai]
 		ch = max(ch, int(as.Y))
 		regs[1] = uint32(chf.Spans[ai].Reg) | (uint32(chf.Areas[ai]) << 16)
-		if GetCon(&as, dirp) != notConnected {
-			ax2 := ax + GetDirOffsetX(dirp)
-			ay2 := ay + GetDirOffsetZ(dirp)
-			ai2 := int(chf.Cells[ax2+ay2*chf.Width].Index) + GetCon(&as, dirp)
+		if Con(&as, dirp) != notConnected {
+			ax2 := ax + DirOffsetX(dirp)
+			ay2 := ay + DirOffsetZ(dirp)
+			ai2 := int(chf.Cells[ax2+ay2*chf.Width].Index) + Con(&as, dirp)
 			as2 := chf.Spans[ai2]
 			ch = max(ch, int(as2.Y))
 			regs[2] = uint32(chf.Spans[ai2].Reg) | (uint32(chf.Areas[ai2]) << 16)
 		}
 	}
-	if GetCon(&s, dirp) != notConnected {
-		ax := x + GetDirOffsetX(dirp)
-		ay := y + GetDirOffsetZ(dirp)
-		ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&s, dirp)
+	if Con(&s, dirp) != notConnected {
+		ax := x + DirOffsetX(dirp)
+		ay := y + DirOffsetZ(dirp)
+		ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&s, dirp)
 		as := chf.Spans[ai]
 		ch = max(ch, int(as.Y))
 		regs[3] = uint32(chf.Spans[ai].Reg) | (uint32(chf.Areas[ai]) << 16)
-		if GetCon(&as, dir) != notConnected {
-			ax2 := ax + GetDirOffsetX(dir)
-			ay2 := ay + GetDirOffsetZ(dir)
-			ai2 := int(chf.Cells[ax2+ay2*chf.Width].Index) + GetCon(&as, dir)
+		if Con(&as, dir) != notConnected {
+			ax2 := ax + DirOffsetX(dir)
+			ay2 := ay + DirOffsetZ(dir)
+			ai2 := int(chf.Cells[ax2+ay2*chf.Width].Index) + Con(&as, dir)
 			as2 := chf.Spans[ai2]
 			ch = max(ch, int(as2.Y))
 			regs[2] = uint32(chf.Spans[ai2].Reg) | (uint32(chf.Areas[ai2]) << 16)
@@ -697,10 +697,10 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]
 
 			r := 0
 			s := chf.Spans[i]
-			if GetCon(&s, int(dir)) != notConnected {
-				ax := x + GetDirOffsetX(int(dir))
-				ay := y + GetDirOffsetZ(int(dir))
-				ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&s, int(dir))
+			if Con(&s, int(dir)) != notConnected {
+				ax := x + DirOffsetX(int(dir))
+				ay := y + DirOffsetZ(int(dir))
+				ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&s, int(dir))
 				r = int(chf.Spans[ai].Reg)
 				if area != chf.Areas[ai] {
 					isAreaBorder = true
@@ -718,12 +718,12 @@ func walkContour(x, y, i int, chf *CompactHeightfield, flags []uint8, points *[]
 			dir = (dir + 1) & 0x3
 		} else {
 			ni := -1
-			nx := x + GetDirOffsetX(int(dir))
-			ny := y + GetDirOffsetZ(int(dir))
+			nx := x + DirOffsetX(int(dir))
+			ny := y + DirOffsetZ(int(dir))
 			s := chf.Spans[i]
-			if GetCon(&s, int(dir)) != notConnected {
+			if Con(&s, int(dir)) != notConnected {
 				nc := chf.Cells[nx+ny*chf.Width]
-				ni = int(nc.Index) + GetCon(&s, int(dir))
+				ni = int(nc.Index) + Con(&s, int(dir))
 			}
 			if ni == -1 {
 				return
@@ -1166,10 +1166,10 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				}
 				for dir := 0; dir < 4; dir++ {
 					r := uint16(0)
-					if GetCon(&s, dir) != notConnected {
-						ax := x + GetDirOffsetX(dir)
-						ay := y + GetDirOffsetZ(dir)
-						ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+					if Con(&s, dir) != notConnected {
+						ax := x + DirOffsetX(dir)
+						ay := y + DirOffsetZ(dir)
+						ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 						r = chf.Spans[ai].Reg
 					}
 					if r == chf.Spans[i].Reg {
@@ -1219,7 +1219,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 						newConts := make([]Contour, maxContours)
 						copy(newConts, cset.Conts[:cset.Nconts])
 						cset.Conts = newConts
-						ctx.Log(LogWarning, "rcBuildContours: Expanding max contours from %d to %d.", oldMax, maxContours)
+						ctx.Log(LogWarning, "BuildContours: Expanding max contours from %d to %d.", oldMax, maxContours)
 					}
 
 					cont := &cset.Conts[cset.Nconts]
@@ -1277,7 +1277,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				cont := cset.Conts[i]
 				if winding[i] > 0 {
 					if regions[cont.Reg].outline != nil {
-						ctx.Log(LogError, "rcBuildContours: Multiple outlines for region %d.", cont.Reg)
+						ctx.Log(LogError, "BuildContours: Multiple outlines for region %d.", cont.Reg)
 					}
 					regions[cont.Reg].outline = &cset.Conts[i]
 				} else {
@@ -1310,7 +1310,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				if reg.outline != nil {
 					mergeRegionHoles(ctx, reg)
 				} else {
-					ctx.Log(LogError, "rcBuildContours: Bad outline for region %d, contour simplification is likely too aggressive.", i)
+					ctx.Log(LogError, "BuildContours: Bad outline for region %d, contour simplification is likely too aggressive.", i)
 				}
 			}
 		}

@@ -55,10 +55,10 @@ func calculateDistanceField(chf *CompactHeightfield, src []uint16) uint16 {
 
 				nc := 0
 				for dir := 0; dir < 4; dir++ {
-					if GetCon(&s, dir) != notConnected {
-						ax := x + GetDirOffsetX(dir)
-						ay := y + GetDirOffsetZ(dir)
-						ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+					if Con(&s, dir) != notConnected {
+						ax := x + DirOffsetX(dir)
+						ay := y + DirOffsetZ(dir)
+						ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 						if area == chf.Areas[ai] {
 							nc++
 						}
@@ -78,41 +78,41 @@ func calculateDistanceField(chf *CompactHeightfield, src []uint16) uint16 {
 			for i := int(c.Index); i < int(c.Index+c.Count); i++ {
 				s := chf.Spans[i]
 
-				if GetCon(&s, 0) != notConnected {
+				if Con(&s, 0) != notConnected {
 					// (-1,0)
-					ax := x + GetDirOffsetX(0)
-					ay := y + GetDirOffsetZ(0)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 0)
+					ax := x + DirOffsetX(0)
+					ay := y + DirOffsetZ(0)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 0)
 					as := chf.Spans[ai]
 					if src[ai]+2 < src[i] {
 						src[i] = src[ai] + 2
 					}
 
 					// (-1,-1)
-					if GetCon(&as, 3) != notConnected {
-						aax := ax + GetDirOffsetX(3)
-						aay := ay + GetDirOffsetZ(3)
-						aai := int(chf.Cells[aax+aay*w].Index) + GetCon(&as, 3)
+					if Con(&as, 3) != notConnected {
+						aax := ax + DirOffsetX(3)
+						aay := ay + DirOffsetZ(3)
+						aai := int(chf.Cells[aax+aay*w].Index) + Con(&as, 3)
 						if src[aai]+3 < src[i] {
 							src[i] = src[aai] + 3
 						}
 					}
 				}
-				if GetCon(&s, 3) != notConnected {
+				if Con(&s, 3) != notConnected {
 					// (0,-1)
-					ax := x + GetDirOffsetX(3)
-					ay := y + GetDirOffsetZ(3)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 3)
+					ax := x + DirOffsetX(3)
+					ay := y + DirOffsetZ(3)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 3)
 					as := chf.Spans[ai]
 					if src[ai]+2 < src[i] {
 						src[i] = src[ai] + 2
 					}
 
 					// (1,-1)
-					if GetCon(&as, 2) != notConnected {
-						aax := ax + GetDirOffsetX(2)
-						aay := ay + GetDirOffsetZ(2)
-						aai := int(chf.Cells[aax+aay*w].Index) + GetCon(&as, 2)
+					if Con(&as, 2) != notConnected {
+						aax := ax + DirOffsetX(2)
+						aay := ay + DirOffsetZ(2)
+						aai := int(chf.Cells[aax+aay*w].Index) + Con(&as, 2)
 						if src[aai]+3 < src[i] {
 							src[i] = src[aai] + 3
 						}
@@ -129,41 +129,41 @@ func calculateDistanceField(chf *CompactHeightfield, src []uint16) uint16 {
 			for i := int(c.Index); i < int(c.Index+c.Count); i++ {
 				s := chf.Spans[i]
 
-				if GetCon(&s, 2) != notConnected {
+				if Con(&s, 2) != notConnected {
 					// (1,0)
-					ax := x + GetDirOffsetX(2)
-					ay := y + GetDirOffsetZ(2)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 2)
+					ax := x + DirOffsetX(2)
+					ay := y + DirOffsetZ(2)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 2)
 					as := chf.Spans[ai]
 					if src[ai]+2 < src[i] {
 						src[i] = src[ai] + 2
 					}
 
 					// (1,1)
-					if GetCon(&as, 1) != notConnected {
-						aax := ax + GetDirOffsetX(1)
-						aay := ay + GetDirOffsetZ(1)
-						aai := int(chf.Cells[aax+aay*w].Index) + GetCon(&as, 1)
+					if Con(&as, 1) != notConnected {
+						aax := ax + DirOffsetX(1)
+						aay := ay + DirOffsetZ(1)
+						aai := int(chf.Cells[aax+aay*w].Index) + Con(&as, 1)
 						if src[aai]+3 < src[i] {
 							src[i] = src[aai] + 3
 						}
 					}
 				}
-				if GetCon(&s, 1) != notConnected {
+				if Con(&s, 1) != notConnected {
 					// (0,1)
-					ax := x + GetDirOffsetX(1)
-					ay := y + GetDirOffsetZ(1)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 1)
+					ax := x + DirOffsetX(1)
+					ay := y + DirOffsetZ(1)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 1)
 					as := chf.Spans[ai]
 					if src[ai]+2 < src[i] {
 						src[i] = src[ai] + 2
 					}
 
 					// (-1,1)
-					if GetCon(&as, 0) != notConnected {
-						aax := ax + GetDirOffsetX(0)
-						aay := ay + GetDirOffsetZ(0)
-						aai := int(chf.Cells[aax+aay*w].Index) + GetCon(&as, 0)
+					if Con(&as, 0) != notConnected {
+						aax := ax + DirOffsetX(0)
+						aay := ay + DirOffsetZ(0)
+						aai := int(chf.Cells[aax+aay*w].Index) + Con(&as, 0)
 						if src[aai]+3 < src[i] {
 							src[i] = src[aai] + 3
 						}
@@ -202,18 +202,18 @@ func boxBlur(chf *CompactHeightfield, thr int, src, dst []uint16) {
 
 				d := int(cd)
 				for dir := 0; dir < 4; dir++ {
-					if GetCon(&s, dir) != notConnected {
-						ax := x + GetDirOffsetX(dir)
-						ay := y + GetDirOffsetZ(dir)
-						ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+					if Con(&s, dir) != notConnected {
+						ax := x + DirOffsetX(dir)
+						ay := y + DirOffsetZ(dir)
+						ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 						d += int(src[ai])
 
 						as := chf.Spans[ai]
 						dir2 := (dir + 1) & 0x3
-						if GetCon(&as, dir2) != notConnected {
-							ax2 := ax + GetDirOffsetX(dir2)
-							ay2 := ay + GetDirOffsetZ(dir2)
-							ai2 := int(chf.Cells[ax2+ay2*w].Index) + GetCon(&as, dir2)
+						if Con(&as, dir2) != notConnected {
+							ax2 := ax + DirOffsetX(dir2)
+							ay2 := ay + DirOffsetZ(dir2)
+							ai2 := int(chf.Cells[ax2+ay2*w].Index) + Con(&as, dir2)
 							d += int(src[ai2])
 						} else {
 							d += int(cd)
@@ -259,10 +259,10 @@ func floodRegion(x, y, i int, level, r uint16, chf *CompactHeightfield, srcReg, 
 		ar := uint16(0)
 		for dir := 0; dir < 4; dir++ {
 			// 8 connected
-			if GetCon(&cs, dir) != notConnected {
-				ax := cx + GetDirOffsetX(dir)
-				ay := cy + GetDirOffsetZ(dir)
-				ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&cs, dir)
+			if Con(&cs, dir) != notConnected {
+				ax := cx + DirOffsetX(dir)
+				ay := cy + DirOffsetZ(dir)
+				ai := int(chf.Cells[ax+ay*w].Index) + Con(&cs, dir)
 				if chf.Areas[ai] != area {
 					continue
 				}
@@ -278,10 +278,10 @@ func floodRegion(x, y, i int, level, r uint16, chf *CompactHeightfield, srcReg, 
 				as := chf.Spans[ai]
 
 				dir2 := (dir + 1) & 0x3
-				if GetCon(&as, dir2) != notConnected {
-					ax2 := ax + GetDirOffsetX(dir2)
-					ay2 := ay + GetDirOffsetZ(dir2)
-					ai2 := int(chf.Cells[ax2+ay2*w].Index) + GetCon(&as, dir2)
+				if Con(&as, dir2) != notConnected {
+					ax2 := ax + DirOffsetX(dir2)
+					ay2 := ay + DirOffsetZ(dir2)
+					ai2 := int(chf.Cells[ax2+ay2*w].Index) + Con(&as, dir2)
 					if chf.Areas[ai2] != area {
 						continue
 					}
@@ -302,10 +302,10 @@ func floodRegion(x, y, i int, level, r uint16, chf *CompactHeightfield, srcReg, 
 
 		// Expand neighbours.
 		for dir := 0; dir < 4; dir++ {
-			if GetCon(&cs, dir) != notConnected {
-				ax := cx + GetDirOffsetX(dir)
-				ay := cy + GetDirOffsetZ(dir)
-				ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&cs, dir)
+			if Con(&cs, dir) != notConnected {
+				ax := cx + DirOffsetX(dir)
+				ay := cy + DirOffsetZ(dir)
+				ai := int(chf.Cells[ax+ay*w].Index) + Con(&cs, dir)
 				if chf.Areas[ai] != area {
 					continue
 				}
@@ -369,12 +369,12 @@ func expandRegions(maxIter int, level uint16, chf *CompactHeightfield, srcReg, s
 			area := chf.Areas[i]
 			s := chf.Spans[i]
 			for dir := 0; dir < 4; dir++ {
-				if GetCon(&s, dir) == notConnected {
+				if Con(&s, dir) == notConnected {
 					continue
 				}
-				ax := x + GetDirOffsetX(dir)
-				ay := y + GetDirOffsetZ(dir)
-				ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+				ax := x + DirOffsetX(dir)
+				ay := y + DirOffsetZ(dir)
+				ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 				if chf.Areas[ai] != area {
 					continue
 				}
@@ -588,10 +588,10 @@ func isRegionConnectedToBorder(reg *Region) bool {
 func isSolidEdge(chf *CompactHeightfield, srcReg []uint16, x, y, i, dir int) bool {
 	s := chf.Spans[i]
 	r := uint16(0)
-	if GetCon(&s, dir) != notConnected {
-		ax := x + GetDirOffsetX(dir)
-		ay := y + GetDirOffsetZ(dir)
-		ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&s, dir)
+	if Con(&s, dir) != notConnected {
+		ax := x + DirOffsetX(dir)
+		ay := y + DirOffsetZ(dir)
+		ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&s, dir)
 		r = srcReg[ai]
 	}
 	if r == srcReg[i] {
@@ -606,10 +606,10 @@ func walkContourRegion(x, y, i, dir int, chf *CompactHeightfield, srcReg []uint1
 
 	ss := chf.Spans[i]
 	curReg := uint16(0)
-	if GetCon(&ss, dir) != notConnected {
-		ax := x + GetDirOffsetX(dir)
-		ay := y + GetDirOffsetZ(dir)
-		ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&ss, dir)
+	if Con(&ss, dir) != notConnected {
+		ax := x + DirOffsetX(dir)
+		ay := y + DirOffsetZ(dir)
+		ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&ss, dir)
 		curReg = srcReg[ai]
 	}
 	*cont = append(*cont, int(curReg))
@@ -626,10 +626,10 @@ func walkContourRegion(x, y, i, dir int, chf *CompactHeightfield, srcReg []uint1
 		if isSolidEdge(chf, srcReg, x, y, i, dir) {
 			// Choose the edge corner
 			r := uint16(0)
-			if GetCon(&s, dir) != notConnected {
-				ax := x + GetDirOffsetX(dir)
-				ay := y + GetDirOffsetZ(dir)
-				ai := int(chf.Cells[ax+ay*chf.Width].Index) + GetCon(&s, dir)
+			if Con(&s, dir) != notConnected {
+				ax := x + DirOffsetX(dir)
+				ay := y + DirOffsetZ(dir)
+				ai := int(chf.Cells[ax+ay*chf.Width].Index) + Con(&s, dir)
 				r = srcReg[ai]
 			}
 			if r != curReg {
@@ -640,11 +640,11 @@ func walkContourRegion(x, y, i, dir int, chf *CompactHeightfield, srcReg []uint1
 			dir = (dir + 1) & 0x3 // Rotate CW
 		} else {
 			ni := -1
-			nx := x + GetDirOffsetX(dir)
-			ny := y + GetDirOffsetZ(dir)
-			if GetCon(&s, dir) != notConnected {
+			nx := x + DirOffsetX(dir)
+			ny := y + DirOffsetZ(dir)
+			if Con(&s, dir) != notConnected {
 				nc := chf.Cells[nx+ny*chf.Width]
-				ni = int(nc.Index) + GetCon(&s, dir)
+				ni = int(nc.Index) + Con(&s, dir)
 			}
 			if ni == -1 {
 				// Should not happen.
@@ -967,10 +967,10 @@ func mergeAndFilterLayerRegions(minRegionArea int, maxRegionId *uint16, chf *Com
 
 				// Update neighbours
 				for dir := 0; dir < 4; dir++ {
-					if GetCon(&s, dir) != notConnected {
-						ax := x + GetDirOffsetX(dir)
-						ay := y + GetDirOffsetZ(dir)
-						ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, dir)
+					if Con(&s, dir) != notConnected {
+						ax := x + DirOffsetX(dir)
+						ay := y + DirOffsetZ(dir)
+						ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, dir)
 						rai := srcReg[ai]
 						if rai > 0 && int(rai) < nreg && rai != ri {
 							addUniqueConnection(reg, int(rai))
@@ -1223,10 +1223,10 @@ func BuildRegionsMonotone(ctx *Context, chf *CompactHeightfield, borderSize, min
 
 				// -x
 				previd := uint16(0)
-				if GetCon(&s, 0) != notConnected {
-					ax := x + GetDirOffsetX(0)
-					ay := y + GetDirOffsetZ(0)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 0)
+				if Con(&s, 0) != notConnected {
+					ax := x + DirOffsetX(0)
+					ay := y + DirOffsetZ(0)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 0)
 					if srcReg[ai]&borderReg == 0 && chf.Areas[i] == chf.Areas[ai] {
 						previd = srcReg[ai]
 					}
@@ -1241,10 +1241,10 @@ func BuildRegionsMonotone(ctx *Context, chf *CompactHeightfield, borderSize, min
 				}
 
 				// -y
-				if GetCon(&s, 3) != notConnected {
-					ax := x + GetDirOffsetX(3)
-					ay := y + GetDirOffsetZ(3)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 3)
+				if Con(&s, 3) != notConnected {
+					ax := x + DirOffsetX(3)
+					ay := y + DirOffsetZ(3)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 3)
 					if srcReg[ai] != 0 && srcReg[ai]&borderReg == 0 && chf.Areas[i] == chf.Areas[ai] {
 						nr := srcReg[ai]
 						if sweeps[previd].nei == 0 || sweeps[previd].nei == nr {
@@ -1452,10 +1452,10 @@ func BuildLayerRegions(ctx *Context, chf *CompactHeightfield, borderSize, minReg
 
 				// -x
 				previd := uint16(0)
-				if GetCon(&s, 0) != notConnected {
-					ax := x + GetDirOffsetX(0)
-					ay := y + GetDirOffsetZ(0)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 0)
+				if Con(&s, 0) != notConnected {
+					ax := x + DirOffsetX(0)
+					ay := y + DirOffsetZ(0)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 0)
 					if srcReg[ai]&borderReg == 0 && chf.Areas[i] == chf.Areas[ai] {
 						previd = srcReg[ai]
 					}
@@ -1470,10 +1470,10 @@ func BuildLayerRegions(ctx *Context, chf *CompactHeightfield, borderSize, minReg
 				}
 
 				// -y
-				if GetCon(&s, 3) != notConnected {
-					ax := x + GetDirOffsetX(3)
-					ay := y + GetDirOffsetZ(3)
-					ai := int(chf.Cells[ax+ay*w].Index) + GetCon(&s, 3)
+				if Con(&s, 3) != notConnected {
+					ax := x + DirOffsetX(3)
+					ay := y + DirOffsetZ(3)
+					ai := int(chf.Cells[ax+ay*w].Index) + Con(&s, 3)
 					if srcReg[ai] != 0 && srcReg[ai]&borderReg == 0 && chf.Areas[i] == chf.Areas[ai] {
 						nr := srcReg[ai]
 						if sweeps[previd].nei == 0 || sweeps[previd].nei == nr {

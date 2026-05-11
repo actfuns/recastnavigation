@@ -31,7 +31,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 		}
 		heightfield.Spans[0] = span
 
-		FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield))
 
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
 	})
@@ -54,7 +54,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 
 		heightfield.Spans[0] = span
 
-		FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield))
 
 		// Check that nothing has changed.
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
@@ -64,7 +64,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 		secondSpan.Smin += 10
 		secondSpan.Smax += 10
 
-		FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield))
 
 		// Check that nothing has changed.
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
@@ -92,7 +92,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 
 		heightfield.Spans[0] = span
 
-		FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield))
 
 		// Check that the second span was changed to walkable.
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
@@ -120,7 +120,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 
 		heightfield.Spans[0] = span
 
-		FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield))
 
 		// Check that the second span was not changed.
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
@@ -151,7 +151,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 			previousSpan = nextSpan
 		}
 
-		FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterLowHangingWalkableObstacles(ctx, walkableHeight, &heightfield))
 
 		currentSpan := heightfield.Spans[0]
 		for i := 0; i < 10; i++ {
@@ -198,7 +198,7 @@ func TestFilterLedgeSpans(t *testing.T) {
 			}
 		}
 
-		FilterLedgeSpans(ctx, walkableHeight, walkableClimb, &heightfield)
+		assert.NoError(t, FilterLedgeSpans(ctx, walkableHeight, walkableClimb, &heightfield))
 
 		for x := 0; x < heightfield.Width; x++ {
 			for z := 0; z < heightfield.Height; z++ {
@@ -219,7 +219,18 @@ func TestFilterLedgeSpans(t *testing.T) {
 	})
 }
 
-// TestFilterWalkableLowHeightSpans tests the FilterWalkableLowHeightSpans function
+// TestFilterNilCtx tests that nil ctx returns an error
+func TestFilterNilCtx(t *testing.T) {
+	var hf Heightfield
+	err := FilterLowHangingWalkableObstacles(nil, 1, &hf)
+	assert.Error(t, err)
+
+	err = FilterLedgeSpans(nil, 1, 1, &hf)
+	assert.Error(t, err)
+
+	err = FilterWalkableLowHeightSpans(nil, 1, &hf)
+	assert.Error(t, err)
+}
 func TestFilterWalkableLowHeightSpans(t *testing.T) {
 	ctx := NewContext(false)
 	walkableHeight := 5
@@ -244,7 +255,7 @@ func TestFilterWalkableLowHeightSpans(t *testing.T) {
 		}
 		heightfield.Spans[0] = span
 
-		FilterWalkableLowHeightSpans(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterWalkableLowHeightSpans(ctx, walkableHeight, &heightfield))
 
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
 	})
@@ -265,7 +276,7 @@ func TestFilterWalkableLowHeightSpans(t *testing.T) {
 		}
 		heightfield.Spans[0] = span
 
-		FilterWalkableLowHeightSpans(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterWalkableLowHeightSpans(ctx, walkableHeight, &heightfield))
 
 		assert.Equal(t, uint32(1), heightfield.Spans[0].Area)
 		assert.Equal(t, uint32(NullArea), heightfield.Spans[0].Next.Area)
@@ -287,7 +298,7 @@ func TestFilterWalkableLowHeightSpans(t *testing.T) {
 		}
 		heightfield.Spans[0] = span
 
-		FilterWalkableLowHeightSpans(ctx, walkableHeight, &heightfield)
+		assert.NoError(t, FilterWalkableLowHeightSpans(ctx, walkableHeight, &heightfield))
 
 		assert.Equal(t, uint32(NullArea), heightfield.Spans[0].Area)
 		assert.Equal(t, uint32(NullArea), heightfield.Spans[0].Next.Area)

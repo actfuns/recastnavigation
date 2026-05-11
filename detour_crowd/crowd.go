@@ -1,6 +1,8 @@
 package detour_crowd
 
 import (
+	"errors"
+	"github.com/actfuns/recastnavigation/detour"
 	"math"
 	"unsafe"
 )
@@ -786,17 +788,17 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 			c.navquery.InitSlicedFindPath(path[0], ag.targetRef, ag.npos, ag.targetPos, queryFilter)
 			c.navquery.UpdateSlicedFindPath(maxIter, nil)
 
-			var status Status
+			var err error
 			if ag.targetReplan {
-				status = c.navquery.FinalizeSlicedFindPathPartial(path[:npath], npath, reqPath, &reqPathCount, maxRes)
+				err = c.navquery.FinalizeSlicedFindPathPartial(path[:npath], npath, reqPath, &reqPathCount, maxRes)
 			} else {
-				status = c.navquery.FinalizeSlicedFindPath(reqPath, &reqPathCount, maxRes)
+				err = c.navquery.FinalizeSlicedFindPath(reqPath, &reqPathCount, maxRes)
 			}
 
-			if !StatusFailed(status) && reqPathCount > 0 {
+			if err == nil && reqPathCount > 0 {
 				if reqPath[reqPathCount-1] != ag.targetRef {
-					status = c.navquery.ClosestPointOnPoly(reqPath[reqPathCount-1], ag.targetPos, &reqPos, nil)
-					if StatusFailed(status) {
+					err = c.navquery.ClosestPointOnPoly(reqPath[reqPathCount-1], ag.targetPos, &reqPos, nil)
+					if err != nil {
 						reqPathCount = 0
 					}
 				} else {
@@ -853,8 +855,8 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 		}
 
 		if ag.targetState == CrowdAgentTargetWaitingForPath {
-			status := c.pathQueue.GetRequestStatus(ag.targetPathqRef)
-			if StatusFailed(status) {
+			err := c.pathQueue.GetRequestErr(ag.targetPathqRef)
+			if err != nil {
 				ag.targetPathqRef = 0
 				if ag.targetRef != 0 {
 					ag.targetState = CrowdAgentTargetRequesting
@@ -862,7 +864,7 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 					ag.targetState = CrowdAgentTargetFailed
 				}
 				ag.targetReplanTime = 0
-			} else if StatusSucceed(status) {
+			} else if err == nil {
 				path := ag.corridor.GetPath()
 				npath := ag.corridor.GetPathCount()
 
@@ -870,12 +872,12 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 				res := c.pathResult
 				valid := true
 				nres := 0
-				status := c.pathQueue.GetPathResult(ag.targetPathqRef, res, &nres, c.maxPathResult)
-				if StatusFailed(status) || nres == 0 {
+				err := c.pathQueue.GetPathResult(ag.targetPathqRef, res, &nres, c.maxPathResult)
+				if err != nil || nres == 0 {
 					valid = false
 				}
 
-				if StatusDetail(status, StatusPartialResult) {
+				if errors.Is(err, detour.ErrPartialResult) {
 					ag.partial = true
 				} else {
 					ag.partial = false
@@ -912,8 +914,8 @@ func (c *Crowd) updateMoveRequest(dt float32) {
 					// Check for partial path.
 					if res[nres-1] != ag.targetRef {
 						var nearest [3]float32
-						status := c.navquery.ClosestPointOnPoly(res[nres-1], targetPos, &nearest, nil)
-						if StatusSucceed(status) {
+						err := c.navquery.ClosestPointOnPoly(res[nres-1], targetPos, &nearest, nil)
+						if err == nil {
 							targetPos = nearest
 						} else {
 							valid = false
