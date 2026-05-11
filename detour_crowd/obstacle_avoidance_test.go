@@ -734,7 +734,7 @@ func TestProcessSample(t *testing.T) {
 			t.Errorf("expected non-negative penalty, got %f", penalty)
 		}
 	})
-	}
+}
 
 func TestPrepare(t *testing.T) {
 	t.Run("should prepare circles with side selection", func(t *testing.T) {

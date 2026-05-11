@@ -192,7 +192,7 @@ func BenchmarkFindPolysAroundCircle(b *testing.B) {
 
 func BenchmarkBuildNavmesh(b *testing.B) {
 	for _, s := range []struct {
-		name      string
+		name       string
 		rows, cols int
 	}{
 		{"10x10_200polys", 10, 10},

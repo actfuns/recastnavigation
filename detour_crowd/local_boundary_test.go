@@ -389,7 +389,7 @@ func TestLocalBoundaryIsValid(t *testing.T) {
 	t.Run("should not check beyond npolys count", func(t *testing.T) {
 		b := NewLocalBoundary()
 		b.polys[0] = 1
-		b.polys[1] = 99 // slot within npolys
+		b.polys[1] = 99  // slot within npolys
 		b.polys[2] = 999 // slot beyond npolys
 		b.npolys = 2
 

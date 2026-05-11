@@ -49,9 +49,9 @@ func buildTestNavmeshBytes(t testing.TB) []byte {
 	}
 
 	verts := []float32{
-		0, 0, 0,   // 0
-		10, 0, 0,  // 1
-		0, 0, 10,  // 2
+		0, 0, 0, // 0
+		10, 0, 0, // 1
+		0, 0, 10, // 2
 		10, 0, 10, // 3
 	}
 
@@ -135,12 +135,18 @@ func buildTestNavmeshBytes(t testing.TB) []byte {
 	offset += 4
 	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.WalkableClimb))
 	offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[0])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[1])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[2])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[0])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[1])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[2])); offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[0]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[1]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[2]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[0]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[1]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[2]))
+	offset += 4
 	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.BVQuantFactor))
 	offset += 4
 	offset = hdrSize
@@ -272,6 +278,7 @@ type gridCell struct {
 // buildGridNavmeshBytes creates binary navmesh data for a rows×cols grid of quads.
 // Each quad is split into two triangles (left and right) along the br→tl diagonal.
 // Grid spans (0,0,0) to (cols*cellSize, 0, rows*cellSize).
+//
 //nolint:unparam
 func buildGridNavmeshBytes(t testing.TB, rows, cols int, cellSize float32) []byte {
 	t.Helper()
@@ -437,12 +444,18 @@ func buildGridNavmeshBytes(t testing.TB, rows, cols int, cellSize float32) []byt
 	offset += 4
 	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.WalkableClimb))
 	offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[0])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[1])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[2])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[0])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[1])); offset += 4
-	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[2])); offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[0]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[1]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmin[2]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[0]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[1]))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.Bmax[2]))
+	offset += 4
 	binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(header.BVQuantFactor))
 	offset += 4
 	offset = hdrSize
@@ -892,7 +905,7 @@ func TestAddTile(t *testing.T) {
 		// Modify header X to 2
 		dataCopy := make([]byte, len(data))
 		copy(dataCopy, data)
-		binary.LittleEndian.PutUint32(dataCopy[8:], 2) // X=2
+		binary.LittleEndian.PutUint32(dataCopy[8:], 2)  // X=2
 		binary.LittleEndian.PutUint32(dataCopy[12:], 3) // Y=3
 
 		ref, err := m.AddTile(dataCopy, 0, 0)
@@ -1659,12 +1672,12 @@ func TestIsValidPolyRefEdgeCases(t *testing.T) {
 	filter := &QueryFilter{}
 	filter.IncludeFlags = 0xffff
 
-		t.Run("zero ref is invalid", func(t *testing.T) {
+	t.Run("zero ref is invalid", func(t *testing.T) {
 		if q.IsValidPolyRef(0, filter) {
 			t.Fatal("expected false for zero ref")
 		}
 	})
-t.Run("valid ref passes filter flags", func(t *testing.T) {
+	t.Run("valid ref passes filter flags", func(t *testing.T) {
 		ref, _, _ := q.FindNearestPoly([3]float32{5, 0, 5}, [3]float32{10, 2, 10}, filter)
 		if ref == 0 {
 			t.Skip("no ref found")

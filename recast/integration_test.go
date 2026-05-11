@@ -632,7 +632,7 @@ func TestContextHandling(t *testing.T) {
 			Width: 10, Height: 10,
 			Bmin: [3]float32{0, 0, 0},
 			Bmax: [3]float32{10, 1, 10},
-			Cs: 0.3, Ch: 0.2,
+			Cs:   0.3, Ch: 0.2,
 			Spans: make([]*Span, 100),
 		}, 1)
 		if err == nil {

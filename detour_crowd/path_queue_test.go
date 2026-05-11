@@ -287,7 +287,9 @@ func TestPathQueueGetPathResult(t *testing.T) {
 
 	t.Run("should trim path to maxPath length", func(t *testing.T) {
 		mock := &mockNavQueryForPathQueue{
-			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error { return nil },
+			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error {
+				return nil
+			},
 			getPathFromSlicedFunc: func(path []PolyRef, maxPath int) (int, error) {
 				for i := 0; i < maxPath; i++ {
 					path[i] = PolyRef(100 + i)
@@ -314,7 +316,9 @@ func TestPathQueueGetPathResult(t *testing.T) {
 
 	t.Run("should handle partial result", func(t *testing.T) {
 		mock := &mockNavQueryForPathQueue{
-			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error { return nil },
+			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error {
+				return nil
+			},
 			getPathFromSlicedFunc: func(path []PolyRef, maxPath int) (int, error) {
 				path[0] = 42
 				return 1, detour.ErrPartialResult
@@ -476,7 +480,9 @@ func TestPathQueueUpdate(t *testing.T) {
 		requestsProcessed := 0
 
 		mock := &mockNavQueryForPathQueue{
-			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error { return nil },
+			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error {
+				return nil
+			},
 			getPathFromSlicedFunc: func(path []PolyRef, maxPath int) (int, error) {
 				path[0] = 42
 				requestsProcessed++
@@ -514,7 +520,9 @@ func TestPathQueueUpdate(t *testing.T) {
 
 	t.Run("should handle wrapped queue head across multiple updates", func(t *testing.T) {
 		mock := &mockNavQueryForPathQueue{
-			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error { return nil },
+			findPathSlicedFunc: func(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error {
+				return nil
+			},
 			getPathFromSlicedFunc: func(path []PolyRef, maxPath int) (int, error) {
 				path[0] = 42
 				return 1, nil
