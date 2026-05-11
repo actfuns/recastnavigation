@@ -18,7 +18,9 @@ func FreeTileCacheContourSet(alloc TileCacheAlloc, cset *TileCacheContourSet) {
 	for i := 0; i < cset.NConts; i++ {
 		alloc.Free(cset.Conts[i].Verts)
 	}
-	alloc.Free(unsafe.Slice((*uint8)(unsafe.Pointer(&cset.Conts[0])), len(cset.Conts)*int(unsafe.Sizeof(cset.Conts[0]))))
+	if len(cset.Conts) > 0 {
+		alloc.Free(unsafe.Slice((*uint8)(unsafe.Pointer(&cset.Conts[0])), len(cset.Conts)*int(unsafe.Sizeof(cset.Conts[0]))))
+	}
 	alloc.Free(ptrToSlice(cset))
 }
 

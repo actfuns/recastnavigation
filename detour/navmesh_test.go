@@ -22,7 +22,7 @@ import (
 // Poly 0: triangle (0,0,0), (10,0,0), (0,0,10) — left half
 // Poly 1: triangle (10,0,0), (10,0,10), (0,0,10) — right half
 // Shared edge: (10,0,0)→(0,0,10) which is poly0 edge1, poly1 edge2.
-func buildTestNavmeshBytes(t *testing.T) []byte {
+func buildTestNavmeshBytes(t testing.TB) []byte {
 	t.Helper()
 
 	header := MeshHeader{
@@ -223,7 +223,7 @@ func buildTestNavmeshBytes(t *testing.T) []byte {
 }
 
 // buildTestNavmesh creates a ready-to-use NavMesh with a simple 2-polygon floor.
-func buildTestNavmesh(t *testing.T) *NavMesh {
+func buildTestNavmesh(t testing.TB) *NavMesh {
 	t.Helper()
 
 	data := buildTestNavmeshBytes(t)
@@ -236,7 +236,7 @@ func buildTestNavmesh(t *testing.T) *NavMesh {
 }
 
 // createTestQuery creates a NavMeshQuery ready for tests.
-func createTestQuery(t *testing.T, m *NavMesh) *NavMeshQuery {
+func createTestQuery(t testing.TB, m *NavMesh) *NavMeshQuery {
 	t.Helper()
 	q := NewNavMeshQuery()
 	err := q.Init(m, 2048)
@@ -247,7 +247,7 @@ func createTestQuery(t *testing.T, m *NavMesh) *NavMeshQuery {
 }
 
 // buildTestGridNavmesh creates a ready-to-use NavMesh for a rows×cols grid.
-func buildTestGridNavmesh(t *testing.T, rows, cols int, cellSize float32) *NavMesh {
+func buildTestGridNavmesh(t testing.TB, rows, cols int, cellSize float32) *NavMesh {
 	t.Helper()
 
 	data := buildGridNavmeshBytes(t, rows, cols, cellSize)
@@ -273,7 +273,7 @@ type gridCell struct {
 // Each quad is split into two triangles (left and right) along the br→tl diagonal.
 // Grid spans (0,0,0) to (cols*cellSize, 0, rows*cellSize).
 //nolint:unparam
-func buildGridNavmeshBytes(t *testing.T, rows, cols int, cellSize float32) []byte {
+func buildGridNavmeshBytes(t testing.TB, rows, cols int, cellSize float32) []byte {
 	t.Helper()
 
 	nVerts := (rows + 1) * (cols + 1)
@@ -303,7 +303,7 @@ func buildGridNavmeshBytes(t *testing.T, rows, cols int, cellSize float32) []byt
 		rightIdx := i*2 + 1
 		polys[leftIdx] = Poly{
 			FirstLink:   0,
-			Verts:       [6]uint16{uint16(cell.bl), uint16(cell.br), uint16(cell.tl), 0, 0, 0},
+			Verts:       [6]uint16{uint16(cell.bl), uint16(cell.tl), uint16(cell.br), 0, 0, 0},
 			Neis:        [6]uint16{0, 0, 0, 0, 0, 0},
 			Flags:       0xffff,
 			VertCount:   3,
@@ -311,14 +311,14 @@ func buildGridNavmeshBytes(t *testing.T, rows, cols int, cellSize float32) []byt
 		}
 		polys[rightIdx] = Poly{
 			FirstLink:   0,
-			Verts:       [6]uint16{uint16(cell.br), uint16(cell.tr), uint16(cell.tl), 0, 0, 0},
+			Verts:       [6]uint16{uint16(cell.br), uint16(cell.tl), uint16(cell.tr), 0, 0, 0},
 			Neis:        [6]uint16{0, 0, 0, 0, 0, 0},
 			Flags:       0xffff,
 			VertCount:   3,
 			areaAndtype: 63,
 		}
 		polys[leftIdx].Neis[1] = uint16(rightIdx + 1)
-		polys[rightIdx].Neis[2] = uint16(leftIdx + 1)
+		polys[rightIdx].Neis[0] = uint16(leftIdx + 1)
 	}
 
 	for r := 0; r < rows; r++ {
@@ -327,8 +327,8 @@ func buildGridNavmeshBytes(t *testing.T, rows, cols int, cellSize float32) []byt
 			rightPoly := cellIdx*2 + 1
 			nextLeftPoly := (cellIdx + 1) * 2
 
-			polys[rightPoly].Neis[0] = uint16(nextLeftPoly + 1)
-			polys[nextLeftPoly].Neis[2] = uint16(rightPoly + 1)
+			polys[rightPoly].Neis[2] = uint16(nextLeftPoly + 1)
+			polys[nextLeftPoly].Neis[0] = uint16(rightPoly + 1)
 		}
 	}
 
@@ -339,7 +339,7 @@ func buildGridNavmeshBytes(t *testing.T, rows, cols int, cellSize float32) []byt
 			aboveLeftPoly := (cellIdx + cols) * 2
 
 			polys[topPoly].Neis[1] = uint16(aboveLeftPoly + 1)
-			polys[aboveLeftPoly].Neis[0] = uint16(topPoly + 1)
+			polys[aboveLeftPoly].Neis[2] = uint16(topPoly + 1)
 		}
 	}
 
