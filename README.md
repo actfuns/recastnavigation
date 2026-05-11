@@ -31,9 +31,9 @@
 
 | 包 | 状态 | 说明 |
 |----|------|------|
-| `recast` | ✅ 基本完成 | 导航网格生成核心功能 |
-| `detour` | ✅ 基本完成 | 路径寻路与查询，含序列化 |
-| `detour_crowd` | ✅ 基本完成 | 群体移动与碰撞避免 |
+| `recast` | ✅ 完成 | 导航网格生成核心功能，已移植 C++ 单元测试 |
+| `detour` | ✅ 完成 | 路径寻路与查询，含序列化，算法逻辑与 C++ 完全一致 |
+| `detour_crowd` | ✅ 完成 | 群体移动与碰撞避免，已移植 C++ 单元测试 |
 | `detour_tile_cache` | ✅ 基本完成 | 分块流式加载 |
 | `debug_utils` | ✅ 基本完成 | 调试绘制 |
 
@@ -59,29 +59,30 @@ func main() {
     // 1. 从序列化数据加载导航网格
     navMesh := &detour.NavMesh{}
     // 假设 navData 是 []byte 格式的导航网格数据
-    status := navMesh.InitSingleTile(navData, 0)
-    if detour.StatusFailed(status) {
+    err := navMesh.InitSingleTile(navData, 0)
+    if err != nil {
         panic("加载导航网格失败")
     }
 
     // 2. 创建查询对象
-    query := detour.NewNavMeshQuery()
-    query.Init(navMesh, 2048)
+    query, err := detour.NewNavMeshQuery(navMesh, 2048)
+    if err != nil {
+        panic("创建查询对象失败")
+    }
 
     // 3. 查询起始和结束多边形
-    filter := detour.NewQueryFilter()
-    startPos := []float32{10, 0, 10}
-    endPos := []float32{20, 0, 20}
-    halfExtents := []float32{2, 4, 2}
+    filter := &detour.QueryFilter{}
+    startPos := [3]float32{10, 0, 10}
+    endPos := [3]float32{20, 0, 20}
+    halfExtents := [3]float32{2, 4, 2}
 
-    startRef := query.FindNearestPoly(startPos, halfExtents, filter)
-    endRef := query.FindNearestPoly(endPos, halfExtents, filter)
+    startRef, _, _ := query.FindNearestPoly(startPos, halfExtents, filter)
+    endRef, _, _ := query.FindNearestPoly(endPos, halfExtents, filter)
 
     // 4. 查找路径
-    path := make([]detour.PolyRef, 512)
-    pathLen, status := query.FindPath(startRef, endRef, startPos, endPos, filter, path, 512)
-    if detour.StatusSucceed(status) {
-        fmt.Printf("找到路径，长度: %d\n", pathLen)
+    path, _, err := query.FindPath(startRef, endRef, startPos, endPos, filter)
+    if err == nil {
+        fmt.Printf("找到路径，长度: %d\n", len(path))
     }
 }
 ```
@@ -95,18 +96,27 @@ import (
 
 func buildNavMesh(vertices []float32, triangles []int) {
     ctx := &recast.Context{}
+    bmin, bmax := recast.CalcBounds(vertices, len(vertices)/3)
     cfg := &recast.Config{
-        // ... 配置参数
+        Cs:   0.3,  // 单元格大小
+        Ch:   0.2,  // 单元格高度
+        Bmin: bmin,
+        Bmax: bmax,
+        // ... 其他配置参数
     }
 
     // 1. 创建高度场
-    hf := recast.NewHeightfield(ctx, cfg)
+    w, h := recast.CalcGridSize(bmin, bmax, cfg.Cs)
+    hf := recast.CreateHeightfield(ctx, w, h, bmin, bmax, cfg.Cs, cfg.Ch)
 
     // 2. 光栅化三角形
-    recast.RasterizeTriangles(ctx, vertices, triangles, hf, cfg)
+    recast.RasterizeTriangles(ctx, vertices, len(vertices)/3, triangles, nil, len(triangles)/3, hf, 1)
 
     // 3. 构建紧凑高度场
-    chf := recast.BuildCompactHeightfield(ctx, cfg, hf)
+    chf, err := recast.BuildCompactHeightfield(ctx, cfg.WalkableHeight, cfg.WalkableClimb, hf)
+    if err != nil {
+        panic("构建紧凑高度场失败")
+    }
 
     // ... 后续流程：过滤、分区、生成多边形等
 }
@@ -121,11 +131,13 @@ go test ./...
 
 ## 与原 C++ 版本差异
 
-- 使用 Go 的 `[]float32` 和 `[3]float32` 代替 C++ 的 `float*` 和 `float[3]`
-- 使用 Go 的错误返回值（`Status` 类型）代替 C++ 的返回码
-- 使用 `encoding/binary` + 手动序列化代替 C++ 的 `memcpy` 结构体序列化
+- 使用 Go 的 `[3]float32`（定长数组）代替 C++ 的 `float*` 和 `float[3]`，避免切片索引越界
+- 函数返回值风格：C++ 使用输出参数 + 返回状态码，Go 使用多返回值（`result, err`）
+- 使用 `encoding/binary` + 手动序列化代替 C++ 的 `memcpy` 结构体序列化，确保二进制兼容
 - 使用 Go 的垃圾回收代替 C++ 的手动内存池管理
-- 去除了 C++ 的虚函数回调机制，改用 Go 的函数/接口
+- 去除了 C++ 的虚函数回调机制，改用 Go 接口
+- 使用 Go 泛型实现 `Min`/`Max`/`Abs`/`Swap` 等工具函数
+- 算法逻辑与 C++ 完全一致（所有核心函数已逐行对比确认）
 
 ## License
 
