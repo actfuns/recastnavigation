@@ -1,9 +1,10 @@
 package detour_tile_cache
 
 import (
-	"github.com/actfuns/recastnavigation/detour"
 	"math"
 	"unsafe"
+
+	"github.com/actfuns/recastnavigation/detour"
 )
 
 const (
@@ -14,8 +15,8 @@ const (
 // TileCache manages dynamic obstacles on a navigation mesh by rebuilding
 // affected tiles when obstacles are added or removed.
 type TileCache struct {
-	tileLutSize  int
-	tileLutMask  int
+	tileLutSize  int32
+	tileLutMask  int32
 	posLookup    []*CompressedTile
 	nextFreeTile *CompressedTile
 	tiles        []CompressedTile
@@ -137,7 +138,7 @@ func (tc *TileCache) Init(params *TileCacheParams, talloc TileCacheAlloc,
 	}
 
 	// Init tiles
-	tc.tileLutSize = int(NextPow2(uint32(params.MaxTiles) / 4))
+	tc.tileLutSize = int32(NextPow2(uint32(params.MaxTiles) / 4))
 	if tc.tileLutSize == 0 {
 		tc.tileLutSize = 1
 	}
@@ -164,7 +165,7 @@ func (tc *TileCache) Init(params *TileCacheParams, talloc TileCacheAlloc,
 }
 
 // GetTilesAt returns tiles at the given tile coordinates.
-func (tc *TileCache) GetTilesAt(tx, ty int, tiles []CompressedTileRef, maxTiles int) int {
+func (tc *TileCache) GetTilesAt(tx, ty int32, tiles []CompressedTileRef, maxTiles int) int {
 	n := 0
 	h := computeTileHash(tx, ty, tc.tileLutMask)
 	tile := tc.posLookup[h]
@@ -181,12 +182,12 @@ func (tc *TileCache) GetTilesAt(tx, ty int, tiles []CompressedTileRef, maxTiles 
 }
 
 // GetTileAt returns the tile at the given coordinates and layer.
-func (tc *TileCache) GetTileAt(tx, ty, tlayer int) *CompressedTile {
+func (tc *TileCache) GetTileAt(tx, ty, tlayer int32) *CompressedTile {
 	h := computeTileHash(tx, ty, tc.tileLutMask)
 	tile := tc.posLookup[h]
 	for tile != nil {
 		if tile.Header != nil && tile.Header.Tx == int32(tx) &&
-			tile.Header.Ty == int32(ty) && tile.Header.Tlayer == int32(tlayer) {
+			tile.Header.Ty == int32(ty) && tile.Header.Tlayer == tlayer {
 			return tile
 		}
 		tile = tile.Next
@@ -241,7 +242,7 @@ func (tc *TileCache) AddTile(data []uint8, dataSize int, flags uint8) (Compresse
 		return 0, detour.ErrWrongVersion
 	}
 
-	if tc.GetTileAt(int(header.Tx), int(header.Ty), int(header.Tlayer)) != nil {
+	if tc.GetTileAt(header.Tx, header.Ty, header.Tlayer) != nil {
 		return 0, detour.ErrFailure
 	}
 
@@ -252,7 +253,7 @@ func (tc *TileCache) AddTile(data []uint8, dataSize int, flags uint8) (Compresse
 	tc.nextFreeTile = tile.Next
 	tile.Next = nil
 
-	h := computeTileHash(int(header.Tx), int(header.Ty), tc.tileLutMask)
+	h := computeTileHash(header.Tx, header.Ty, tc.tileLutMask)
 	tile.Next = tc.posLookup[h]
 	tc.posLookup[h] = tile
 
@@ -282,7 +283,7 @@ func (tc *TileCache) RemoveTile(ref CompressedTileRef) ([]uint8, int, error) {
 		return nil, 0, detour.ErrInvalidParam
 	}
 
-	h := computeTileHash(int(tile.Header.Tx), int(tile.Header.Ty), tc.tileLutMask)
+	h := computeTileHash(tile.Header.Tx, tile.Header.Ty, tc.tileLutMask)
 	var prev *CompressedTile
 	cur := tc.posLookup[h]
 	for cur != nil {
@@ -445,10 +446,10 @@ func (tc *TileCache) QueryTiles(bmin, bmax [3]float32, results []CompressedTileR
 	n := 0
 	tw := float32(tc.params.Width) * tc.params.Cs
 	th := float32(tc.params.Height) * tc.params.Cs
-	tx0 := int(math.Floor(float64((bmin[0] - tc.params.Orig[0]) / tw)))
-	tx1 := int(math.Floor(float64((bmax[0] - tc.params.Orig[0]) / tw)))
-	ty0 := int(math.Floor(float64((bmin[2] - tc.params.Orig[2]) / th)))
-	ty1 := int(math.Floor(float64((bmax[2] - tc.params.Orig[2]) / th)))
+	tx0 := int32(math.Floor(float64((bmin[0] - tc.params.Orig[0]) / tw)))
+	tx1 := int32(math.Floor(float64((bmax[0] - tc.params.Orig[0]) / tw)))
+	ty0 := int32(math.Floor(float64((bmin[2] - tc.params.Orig[2]) / th)))
+	ty1 := int32(math.Floor(float64((bmax[2] - tc.params.Orig[2]) / th)))
 
 	for ty := ty0; ty <= ty1; ty++ {
 		for tx := tx0; tx <= tx1; tx++ {
@@ -471,7 +472,7 @@ func (tc *TileCache) QueryTiles(bmin, bmax [3]float32, results []CompressedTileR
 }
 
 // Update processes pending obstacle requests and rebuilds affected tiles.
-func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface) (bool, error) {
+func (tc *TileCache) Update(dt float32, navmesh *detour.NavMesh) (bool, error) {
 	if tc.nupdate == 0 {
 		// Process requests.
 		for i := 0; i < tc.nreqs; i++ {
@@ -569,7 +570,7 @@ func (tc *TileCache) Update(dt float32, navmesh NavMeshInterface) (bool, error) 
 }
 
 // BuildNavMeshTilesAt builds all tiles at the given coordinates.
-func (tc *TileCache) BuildNavMeshTilesAt(tx, ty int, navmesh NavMeshInterface) error {
+func (tc *TileCache) BuildNavMeshTilesAt(tx, ty int32, navmesh *detour.NavMesh) error {
 	const maxTiles = 32
 	tiles := make([]CompressedTileRef, maxTiles)
 	ntiles := tc.GetTilesAt(tx, ty, tiles, maxTiles)
@@ -585,7 +586,7 @@ func (tc *TileCache) BuildNavMeshTilesAt(tx, ty int, navmesh NavMeshInterface) e
 }
 
 // BuildNavMeshTile builds a navigation mesh tile from a compressed tile.
-func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInterface) error {
+func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh *detour.NavMesh) error {
 	idx := tc.decodeTileIdTile(ref)
 	if int(idx) >= int(tc.params.MaxTiles) {
 		return detour.ErrInvalidParam
@@ -675,7 +676,7 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInte
 		tc.tmproc.Process(params, lmesh.Areas, lmesh.Flags)
 	}
 
-	navData, navDataSize := CreateNavMeshData(params)
+	navData, _ := CreateNavMeshData(params)
 	if navData == nil {
 		return detour.ErrFailure
 	}
@@ -684,7 +685,7 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh NavMeshInte
 	navmesh.RemoveTile(navmesh.GetTileRefAt(tile.Header.Tx, tile.Header.Ty, tile.Header.Tlayer))
 
 	// Add new tile, or leave the location empty.
-	err = navmesh.AddTile(navData, navDataSize, 0x01, nil)
+	_, err = navmesh.AddTile(navData, 0x01, 0)
 	if err != nil {
 		return err
 	}
@@ -774,7 +775,7 @@ func containsRef(a []CompressedTileRef, v CompressedTileRef) bool {
 	return false
 }
 
-func computeTileHash(x, y, mask int) int {
+func computeTileHash(x, y, mask int32) int {
 	const h1 uint32 = 0x8da6b343
 	const h2 uint32 = 0xd8163841
 	n := h1*uint32(x) + h2*uint32(y)

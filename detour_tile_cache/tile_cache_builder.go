@@ -1,9 +1,10 @@
 package detour_tile_cache
 
 import (
-	"github.com/actfuns/recastnavigation/detour"
 	"math"
 	"unsafe"
+
+	"github.com/actfuns/recastnavigation/detour"
 )
 
 // ---------------------------------------------------------------------------
@@ -883,12 +884,12 @@ func TileCacheHeaderSwapEndian(data []uint8, dataSize int) bool {
 	swapEndian32(&header.Tx)
 	swapEndian32(&header.Ty)
 	swapEndian32(&header.Tlayer)
-	swapEndian32((*int32)(unsafe.Pointer(&header.Bmin[0])))
-	swapEndian32((*int32)(unsafe.Pointer(&header.Bmin[1])))
-	swapEndian32((*int32)(unsafe.Pointer(&header.Bmin[2])))
-	swapEndian32((*int32)(unsafe.Pointer(&header.Bmax[0])))
-	swapEndian32((*int32)(unsafe.Pointer(&header.Bmax[1])))
-	swapEndian32((*int32)(unsafe.Pointer(&header.Bmax[2])))
+	swapEndianFloat32(&header.Bmin[0])
+	swapEndianFloat32(&header.Bmin[1])
+	swapEndianFloat32(&header.Bmin[2])
+	swapEndianFloat32(&header.Bmax[0])
+	swapEndianFloat32(&header.Bmax[1])
+	swapEndianFloat32(&header.Bmax[2])
 	swapEndian16(&header.Hmin)
 	swapEndian16(&header.Hmax)
 	// width, height, minx, maxx, miny, maxy are unsigned char, no need to swap.
@@ -898,6 +899,12 @@ func TileCacheHeaderSwapEndian(data []uint8, dataSize int) bool {
 
 func swapEndian32(v *int32) {
 	*v = int32(uint32(*v)<<24 | uint32(*v)>>24&0xff | (uint32(*v)&0xff00)<<8 | (uint32(*v)&0xff0000)>>8)
+}
+
+func swapEndianFloat32(v *float32) {
+	bits := math.Float32bits(*v)
+	bits = bits<<24 | bits>>24&0xff | (bits&0xff00)<<8 | (bits&0xff0000)>>8
+	*v = math.Float32frombits(bits)
 }
 
 func swapEndian16(v *uint16) {

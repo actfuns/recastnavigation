@@ -1931,7 +1931,7 @@ func (q *NavMeshQuery) FindNearestPoly(center, halfExtents [3]float32, filter *Q
 	nearestDistSqr := float32(math.MaxFloat32)
 	var nearestPtLocal [3]float32
 
-	for tileIndex := 0; tileIndex < q.Nav.MaxTiles; tileIndex++ {
+	for tileIndex, maxTiles := 0, int(q.Nav.MaxTiles); tileIndex < maxTiles; tileIndex++ {
 		tile := &q.Nav.Tiles[tileIndex]
 		if tile.Header == nil {
 			continue
@@ -1983,7 +1983,7 @@ func (q *NavMeshQuery) FindRandomPoint(filter *QueryFilter, randomFunc func() fl
 	// Randomly pick one tile using reservoir sampling.
 	var hitTile *MeshTile
 	var tsum float32
-	for i := 0; i < q.Nav.MaxTiles; i++ {
+	for i, maxTiles := 0, int(q.Nav.MaxTiles); i < maxTiles; i++ {
 		t := &q.Nav.Tiles[i]
 		if t.Header == nil {
 			continue
@@ -2219,7 +2219,7 @@ func (q *NavMeshQuery) QueryPolygons(center, halfExtents [3]float32, filter *Que
 	bmax = Vadd(center, halfExtents)
 
 	n := 0
-	for tileIndex := 0; tileIndex < q.Nav.MaxTiles; tileIndex++ {
+	for tileIndex, maxTiles := 0, int(q.Nav.MaxTiles); tileIndex < maxTiles; tileIndex++ {
 		tile := &q.Nav.Tiles[tileIndex]
 		if tile.Header == nil {
 			continue

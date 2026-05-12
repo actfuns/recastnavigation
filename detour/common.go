@@ -567,7 +567,7 @@ func Align4(x int) int {
 }
 
 // OppositeTile returns the opposite side.
-func OppositeTile(side int) int {
+func OppositeTile(side int32) int32 {
 	return (side + 4) & 0x7
 }
 

@@ -50,65 +50,32 @@ func (c *testCompressor) Decompress(compressed []uint8, buffer []uint8) (int, er
 type testMeshProcess struct{}
 
 func (m *testMeshProcess) Process(params *NavMeshCreateParams, polyAreas []uint8, polyFlags []uint16) {
-}
-
-// mockNavMeshEntry stores tile data with coordinates.
-type mockNavMeshEntry struct {
-	tx, ty, tlayer int32
-	data           []uint8
-	dataSize       int
-}
-
-// mockNavMesh simulates a NavMesh for TileCache operations.
-type mockNavMesh struct {
-	tiles   map[uint32]*mockNavMeshEntry
-	nextRef uint32
-}
-
-func newMockNavMesh() *mockNavMesh {
-	return &mockNavMesh{
-		tiles:   make(map[uint32]*mockNavMeshEntry),
-		nextRef: 0,
-	}
-}
-
-func (m *mockNavMesh) RemoveTile(ref uint32) ([]uint8, int, error) {
-	entry, ok := m.tiles[ref]
-	if !ok {
-		return nil, 0, nil
-	}
-	delete(m.tiles, ref)
-	if entry != nil {
-		return entry.data, entry.dataSize, nil
-	}
-	return nil, 0, nil
-}
-
-func (m *mockNavMesh) GetTileRefAt(tx, ty, tlayer int32) uint32 {
-	for ref, entry := range m.tiles {
-		if entry.tx == tx && entry.ty == ty && entry.tlayer == tlayer {
-			return ref
+	for i := range polyAreas {
+		if polyAreas[i] != TileCacheNullArea {
+			polyFlags[i] = 1 // set walk flag for walkable polys
 		}
 	}
-	return 0
 }
 
-func (m *mockNavMesh) AddTile(data []uint8, dataSize int, flags uint8, tileRef *uint32) error {
-	m.nextRef++
-	ref := m.nextRef
-	m.tiles[ref] = &mockNavMeshEntry{
-		data:     data,
-		dataSize: dataSize,
-	}
-	if tileRef != nil {
-		*tileRef = ref
-	}
-	return nil
-}
-
-// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
+
+// createTestNavMesh creates a minimal real detour.NavMesh for testing.
+func createTestNavMesh(t *testing.T) *detour.NavMesh {
+	t.Helper()
+	m := &detour.NavMesh{}
+	err := m.Init(&detour.NavMeshParams{
+		Orig:       [3]float32{0, 0, 0},
+		TileWidth:  10,
+		TileHeight: 10,
+		MaxTiles:   32,
+		MaxPolys:   4096,
+	})
+	if err != nil {
+		t.Fatalf("NavMesh.Init: %v", err)
+	}
+	return m
+}
 
 // defaultParams returns standard TileCacheParams for testing.
 func defaultParams() *TileCacheParams {
@@ -1301,23 +1268,26 @@ func TestTileCacheFullPipeline(t *testing.T) {
 		t.Fatalf("AddTile: %v", err)
 	}
 
-	nm := newMockNavMesh()
+	nm := createTestNavMesh(t)
 
 	t.Run("BuildNavMeshTile", func(t *testing.T) {
 		err = tc.BuildNavMeshTile(ref, nm)
 		if err != nil {
 			t.Fatalf("BuildNavMeshTile: %v", err)
 		}
-		if len(nm.tiles) == 0 {
+		if len(nm.Tiles) == 0 {
 			// This can happen when contour simplification reduces a small
 			// walkable area to <3 vertices, producing an empty polymesh.
 			// The navmesh stays empty, which is valid behavior.
 			t.Log("no tiles in navmesh (empty polymesh from small walkable area)")
 		} else {
-			t.Logf("navmesh tiles: %d", len(nm.tiles))
-			for ref, entry := range nm.tiles {
-				t.Logf("  tile ref=%d, dataSize=%d", ref, entry.dataSize)
+			tileCount := 0
+			for i := 0; i < len(nm.Tiles); i++ {
+				if nm.Tiles[i].Header != nil {
+					tileCount++
+				}
 			}
+			t.Logf("navmesh tiles: %d", tileCount)
 		}
 	})
 
@@ -1330,7 +1300,7 @@ func TestTileCacheFullPipeline(t *testing.T) {
 		data2, size2 := createCompressedTile(t, comp, header, heights, areas, cons)
 		tileRef, _ := tc2.AddTile(data2, size2, 0)
 
-		nm2 := newMockNavMesh()
+		nm2 := createTestNavMesh(t)
 		// First build the tile into the navmesh
 		err = tc2.BuildNavMeshTile(tileRef, nm2)
 		if err != nil {
@@ -1360,7 +1330,7 @@ func TestTileCacheFullPipeline(t *testing.T) {
 		data3, size3 := createCompressedTile(t, comp, header, heights, areas, cons)
 		_, _ = tc3.AddTile(data3, size3, 0)
 
-		nm3 := newMockNavMesh()
+		nm3 := createTestNavMesh(t)
 		err = tc3.BuildNavMeshTilesAt(0, 0, nm3)
 		if err != nil {
 			t.Fatalf("BuildNavMeshTilesAt: %v", err)
@@ -1374,7 +1344,7 @@ func TestTileCacheFullPipeline(t *testing.T) {
 
 func TestTileCacheUpdateEmpty(t *testing.T) {
 	tc := createTestTileCache(t)
-	nm := newMockNavMesh()
+	nm := createTestNavMesh(t)
 
 	done, err := tc.Update(1.0, nm)
 	if err != nil {
@@ -1387,7 +1357,7 @@ func TestTileCacheUpdateEmpty(t *testing.T) {
 
 func TestTileCacheUpdateWithObstacleOnly(t *testing.T) {
 	tc := createTestTileCache(t)
-	nm := newMockNavMesh()
+	nm := createTestNavMesh(t)
 
 	// Add obstacle without any tile — should process without error
 	_, err := tc.AddObstacle([3]float32{0, 0, 0}, 1, 1)
@@ -1404,7 +1374,7 @@ func TestTileCacheUpdateWithObstacleOnly(t *testing.T) {
 
 func TestTileCacheUpdateMaxRequests(t *testing.T) {
 	tc := createTestTileCache(t)
-	nm := newMockNavMesh()
+	nm := createTestNavMesh(t)
 
 	// Add 64 obstacles (maxRequests)
 	for i := 0; i < 64; i++ {

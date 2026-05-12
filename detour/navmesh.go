@@ -12,9 +12,9 @@ type NavMesh struct {
 	Orig        [3]float32
 	TileWidth   float32
 	TileHeight  float32
-	MaxTiles    int
-	TileLutSize int
-	TileLutMask int
+	MaxTiles    int32
+	TileLutSize int32
+	TileLutMask int32
 	PosLookup   []*MeshTile
 	NextFree    *MeshTile
 	Tiles       []MeshTile
@@ -30,8 +30,8 @@ func (m *NavMesh) Init(params *NavMeshParams) error {
 	m.TileHeight = params.TileHeight
 
 	// Init tiles
-	m.MaxTiles = int(params.MaxTiles)
-	m.TileLutSize = int(NextPow2(uint32(params.MaxTiles / 4)))
+	m.MaxTiles = params.MaxTiles
+	m.TileLutSize = int32(NextPow2(uint32(params.MaxTiles / 4)))
 	if m.TileLutSize == 0 {
 		m.TileLutSize = 1
 	}
@@ -41,7 +41,7 @@ func (m *NavMesh) Init(params *NavMeshParams) error {
 	m.PosLookup = make([]*MeshTile, m.TileLutSize)
 
 	m.NextFree = &m.Tiles[0]
-	for i := 0; i < m.MaxTiles-1; i++ {
+	for i := int32(0); i < m.MaxTiles-1; i++ {
 		m.Tiles[i].Salt = 1
 		m.Tiles[i].Next = &m.Tiles[i+1]
 	}
@@ -129,7 +129,7 @@ func overlapSlabs(amin, amax, bmin, bmax [2]float32, px, py float32) bool {
 	return false
 }
 
-func getSlabCoord(va [3]float32, side int) float32 {
+func getSlabCoord(va [3]float32, side int32) float32 {
 	switch side {
 	case 0, 4:
 		return va[0]
@@ -139,7 +139,7 @@ func getSlabCoord(va [3]float32, side int) float32 {
 	return 0
 }
 
-func calcSlabEndPoints(va, vb [3]float32, bmin, bmax []float32, side int) {
+func calcSlabEndPoints(va, vb [3]float32, bmin, bmax []float32, side int32) {
 	switch side {
 	case 0, 4:
 		if va[2] < vb[2] {
@@ -168,7 +168,7 @@ func calcSlabEndPoints(va, vb [3]float32, bmin, bmax []float32, side int) {
 	}
 }
 
-func computeTileHash(x, y int, mask int) int {
+func computeTileHash(x, y int32, mask int32) int {
 	const h1 uint32 = 0x8da6b343
 	const h2 uint32 = 0xd8163841
 	n := h1*uint32(x) + h2*uint32(y)
@@ -190,7 +190,7 @@ func freeLink(tile *MeshTile, link uint32) {
 }
 
 // FindConnectingPolys finds connecting polygons in a neighbour tile.
-func (m *NavMesh) findConnectingPolys(va, vb [3]float32, tile *MeshTile, side int, con []PolyRef, conarea []float32, maxcon int) int {
+func (m *NavMesh) findConnectingPolys(va, vb [3]float32, tile *MeshTile, side int32, con []PolyRef, conarea []float32, maxcon int) int {
 	if tile == nil {
 		return 0
 	}
@@ -268,7 +268,7 @@ func (m *NavMesh) unconnectLinks(tile, target *MeshTile) {
 	}
 }
 
-func (m *NavMesh) connectExtLinks(tile, target *MeshTile, side int) {
+func (m *NavMesh) connectExtLinks(tile, target *MeshTile, side int32) {
 	if tile == nil {
 		return
 	}
@@ -281,7 +281,7 @@ func (m *NavMesh) connectExtLinks(tile, target *MeshTile, side int) {
 				continue
 			}
 
-			dir := int(poly.Neis[j] & 0xff)
+			dir := int32(poly.Neis[j] & 0xff)
 			if side != -1 && dir != side {
 				continue
 			}
@@ -326,7 +326,7 @@ func (m *NavMesh) connectExtLinks(tile, target *MeshTile, side int) {
 	}
 }
 
-func (m *NavMesh) connectExtOffMeshLinks(tile, target *MeshTile, side int) {
+func (m *NavMesh) connectExtOffMeshLinks(tile, target *MeshTile, side int32) {
 	if tile == nil {
 		return
 	}
@@ -750,7 +750,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 		return 0, ErrInvalidParam
 	}
 
-	if m.GetTileAt(int(header.X), int(header.Y), int(header.Layer)) != nil {
+	if m.GetTileAt(header.X, header.Y, header.Layer) != nil {
 		return 0, ErrAlreadyOccupied
 	}
 
@@ -762,7 +762,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 			tile.Next = nil
 		}
 	} else {
-		tileIndex := int(m.DecodePolyIdTile(PolyRef(lastRef)))
+		tileIndex := int32(m.DecodePolyIdTile(PolyRef(lastRef)))
 		if tileIndex >= m.MaxTiles {
 			return 0, ErrOutOfMemory
 		}
@@ -788,7 +788,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 		return 0, ErrOutOfMemory
 	}
 
-	h := computeTileHash(int(header.X), int(header.Y), m.TileLutMask)
+	h := computeTileHash(header.X, header.Y, m.TileLutMask)
 	tile.Next = m.PosLookup[h]
 	m.PosLookup[h] = tile
 
@@ -849,7 +849,7 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 	const maxNeis = 32
 	neis := make([]*MeshTile, maxNeis)
 
-	nneis := m.getTilesAt(int(header.X), int(header.Y), neis, maxNeis)
+	nneis := m.getTilesAt(header.X, header.Y, neis, maxNeis)
 	for j := 0; j < nneis; j++ {
 		if neis[j] == tile {
 			continue
@@ -860,8 +860,8 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 		m.connectExtOffMeshLinks(neis[j], tile, -1)
 	}
 
-	for i := 0; i < 8; i++ {
-		nneis = m.getNeighbourTilesAt(int(header.X), int(header.Y), i, neis, maxNeis)
+	for i := int32(0); i < 8; i++ {
+		nneis = m.getNeighbourTilesAt(header.X, header.Y, i, neis, maxNeis)
 		for j := 0; j < nneis; j++ {
 			m.connectExtLinks(tile, neis[j], i)
 			m.connectExtLinks(neis[j], tile, OppositeTile(i))
@@ -1051,11 +1051,11 @@ func readUint8Slice(data []byte, size int) []uint8 {
 }
 
 // GetTileAt gets the tile at the specified grid location.
-func (m *NavMesh) GetTileAt(x, y, layer int) *MeshTile {
+func (m *NavMesh) GetTileAt(x, y, layer int32) *MeshTile {
 	h := computeTileHash(x, y, m.TileLutMask)
 	tile := m.PosLookup[h]
 	for tile != nil {
-		if tile.Header != nil && int(tile.Header.X) == x && int(tile.Header.Y) == y && int(tile.Header.Layer) == layer {
+		if tile.Header != nil && tile.Header.X == x && tile.Header.Y == y && tile.Header.Layer == layer {
 			return tile
 		}
 		tile = tile.Next
@@ -1063,7 +1063,7 @@ func (m *NavMesh) GetTileAt(x, y, layer int) *MeshTile {
 	return nil
 }
 
-func (m *NavMesh) getNeighbourTilesAt(x, y, side int, tiles []*MeshTile, maxTiles int) int {
+func (m *NavMesh) getNeighbourTilesAt(x, y, side int32, tiles []*MeshTile, maxTiles int) int {
 	nx, ny := x, y
 	switch side {
 	case 0:
@@ -1090,12 +1090,12 @@ func (m *NavMesh) getNeighbourTilesAt(x, y, side int, tiles []*MeshTile, maxTile
 	return m.getTilesAt(nx, ny, tiles, maxTiles)
 }
 
-func (m *NavMesh) getTilesAt(x, y int, tiles []*MeshTile, maxTiles int) int {
+func (m *NavMesh) getTilesAt(x, y int32, tiles []*MeshTile, maxTiles int) int {
 	n := 0
 	h := computeTileHash(x, y, m.TileLutMask)
 	tile := m.PosLookup[h]
 	for tile != nil {
-		if tile.Header != nil && int(tile.Header.X) == x && int(tile.Header.Y) == y {
+		if tile.Header != nil && tile.Header.X == x && tile.Header.Y == y {
 			if n < maxTiles {
 				tiles[n] = tile
 				n++
@@ -1107,16 +1107,16 @@ func (m *NavMesh) getTilesAt(x, y int, tiles []*MeshTile, maxTiles int) int {
 }
 
 // GetTilesAt returns all tiles at the specified grid location.
-func (m *NavMesh) GetTilesAt(x, y int, tiles []*MeshTile, maxTiles int) int {
+func (m *NavMesh) GetTilesAt(x, y int32, tiles []*MeshTile, maxTiles int) int {
 	return m.getTilesAt(x, y, tiles, maxTiles)
 }
 
 // GetTileRefAt returns the tile reference for the tile at the specified location.
-func (m *NavMesh) GetTileRefAt(x, y, layer int) TileRef {
+func (m *NavMesh) GetTileRefAt(x, y, layer int32) TileRef {
 	h := computeTileHash(x, y, m.TileLutMask)
 	tile := m.PosLookup[h]
 	for tile != nil {
-		if tile.Header != nil && int(tile.Header.X) == x && int(tile.Header.Y) == y && int(tile.Header.Layer) == layer {
+		if tile.Header != nil && tile.Header.X == x && tile.Header.Y == y && tile.Header.Layer == layer {
 			return m.GetTileRef(tile)
 		}
 		tile = tile.Next
@@ -1129,7 +1129,7 @@ func (m *NavMesh) GetTileByRef(ref TileRef) *MeshTile {
 	if ref == 0 {
 		return nil
 	}
-	tileIndex := int(m.DecodePolyIdTile(PolyRef(ref)))
+	tileIndex := int32(m.DecodePolyIdTile(PolyRef(ref)))
 	tileSalt := uint32(m.DecodePolyIdSalt(PolyRef(ref)))
 	if tileIndex >= m.MaxTiles {
 		return nil
@@ -1143,7 +1143,7 @@ func (m *NavMesh) GetTileByRef(ref TileRef) *MeshTile {
 
 // GetMaxTiles returns the maximum number of tiles.
 func (m *NavMesh) GetMaxTiles() int {
-	return m.MaxTiles
+	return int(m.MaxTiles)
 }
 
 // GetTile gets the tile at the specified index.
@@ -1164,7 +1164,7 @@ func (m *NavMesh) GetTileAndPolyByRef(ref PolyRef) (*MeshTile, *Poly, error) {
 		return nil, nil, ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return nil, nil, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1188,7 +1188,7 @@ func (m *NavMesh) IsValidPolyRef(ref PolyRef) bool {
 		return false
 	}
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return false
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1208,7 +1208,7 @@ func (m *NavMesh) GetPolyRefBase(tile *MeshTile) PolyRef {
 
 	// Find the tile index by comparing pointers
 	var it uint32
-	for i := 0; i < m.MaxTiles; i++ {
+	for i := 0; i < int(m.MaxTiles); i++ {
 		if &m.Tiles[i] == tile {
 			it = uint32(i)
 			break
@@ -1225,7 +1225,7 @@ func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef) ([
 	}
 
 	salt, it, ip := m.DecodePolyID(polyRef)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return [3]float32{}, [3]float32{}, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1268,7 +1268,7 @@ func (m *NavMesh) GetOffMeshConnectionByRef(ref PolyRef) *OffMeshConnection {
 	}
 
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return nil
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1297,7 +1297,7 @@ func (m *NavMesh) SetPolyFlags(ref PolyRef, flags uint16) error {
 		return ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1318,7 +1318,7 @@ func (m *NavMesh) GetPolyFlags(ref PolyRef) (uint16, error) {
 		return 0, ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return 0, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1338,7 +1338,7 @@ func (m *NavMesh) SetPolyArea(ref PolyRef, area uint8) error {
 		return ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1359,7 +1359,7 @@ func (m *NavMesh) GetPolyArea(ref PolyRef) (uint8, error) {
 		return 0, ErrFailure
 	}
 	salt, it, ip := m.DecodePolyID(ref)
-	if int(it) >= m.MaxTiles {
+	if int32(it) >= m.MaxTiles {
 		return 0, ErrInvalidParam
 	}
 	if m.Tiles[it].Salt != salt || m.Tiles[it].Header == nil {
@@ -1490,7 +1490,7 @@ func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, error) {
 	if ref == 0 {
 		return nil, ErrInvalidParam
 	}
-	tileIndex := int(m.DecodePolyIdTile(PolyRef(ref)))
+	tileIndex := int32(m.DecodePolyIdTile(PolyRef(ref)))
 	tileSalt := uint32(m.DecodePolyIdSalt(PolyRef(ref)))
 	if tileIndex >= m.MaxTiles {
 		return nil, ErrInvalidParam
@@ -1501,7 +1501,7 @@ func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, error) {
 	}
 
 	// Remove from hash lookup
-	h := computeTileHash(int(tile.Header.X), int(tile.Header.Y), m.TileLutMask)
+	h := computeTileHash(tile.Header.X, tile.Header.Y, m.TileLutMask)
 	var prev *MeshTile
 	cur := m.PosLookup[h]
 	for cur != nil {
@@ -1521,7 +1521,7 @@ func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, error) {
 	const maxNeis = 32
 	neis := make([]*MeshTile, maxNeis)
 
-	nneis := m.getTilesAt(int(tile.Header.X), int(tile.Header.Y), neis, maxNeis)
+	nneis := m.getTilesAt(tile.Header.X, tile.Header.Y, neis, maxNeis)
 	for j := 0; j < nneis; j++ {
 		if neis[j] == tile {
 			continue
@@ -1529,8 +1529,8 @@ func (m *NavMesh) RemoveTile(ref TileRef) ([]byte, error) {
 		m.unconnectLinks(neis[j], tile)
 	}
 
-	for i := 0; i < 8; i++ {
-		nneis = m.getNeighbourTilesAt(int(tile.Header.X), int(tile.Header.Y), i, neis, maxNeis)
+	for i := int32(0); i < 8; i++ {
+		nneis = m.getNeighbourTilesAt(tile.Header.X, tile.Header.Y, i, neis, maxNeis)
 		for j := 0; j < nneis; j++ {
 			m.unconnectLinks(neis[j], tile)
 		}

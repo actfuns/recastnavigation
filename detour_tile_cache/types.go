@@ -237,15 +237,6 @@ type NavMeshCreateParams struct {
 	Bmax           [3]float32
 }
 
-// NavMeshInterface defines the subset of NavMesh methods used by TileCache.
-type NavMeshInterface interface {
-	RemoveTile(ref uint32) ([]uint8, int, error)
-	GetTileRefAt(tx, ty, tlayer int32) uint32
-	AddTile(data []uint8, dataSize int, flags uint8, tileRef *uint32) error
-}
-
-// Utility functions
-
 // Align4 aligns an integer to 4 bytes.
 func Align4(x int) int {
 	return (x + 3) & ^3
