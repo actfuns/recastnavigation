@@ -1077,7 +1077,9 @@ func (q *NavMeshQuery) Raycast(startRef PolyRef, startPos, endPos [3]float32, fi
 		}
 
 		// Cast ray against current polygon.
-		hitRes, _, tmax, _, segMax := IntersectSegmentPoly2D(startPos, endPos, verts[:], nv)
+		var tmin, tmax float32
+		var segMin, segMax int
+		hitRes := intersectSegPoly2D(startPos, endPos, verts[:], nv, &tmin, &tmax, &segMin, &segMax)
 		if !hitRes {
 			// Could not hit the polygon, keep the old t and report hit.
 			hit.PathCount = n
