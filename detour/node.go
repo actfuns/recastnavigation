@@ -55,8 +55,13 @@ func NewNodePool(maxNodes, hashSize int) (*NodePool, error) {
 
 // Clear clears the node pool.
 func (p *NodePool) Clear() {
-	for i := range p.first {
-		p.first[i] = NullIdx
+	// Fill first[] with NullIdx using copy-doubling for performance.
+	first := p.first
+	if len(first) > 0 {
+		first[0] = NullIdx
+		for n := 1; n < len(first); n *= 2 {
+			copy(first[n:], first[:n])
+		}
 	}
 	p.nodeCount = 0
 }

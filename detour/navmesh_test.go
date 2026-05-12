@@ -1834,7 +1834,8 @@ func TestFindPathExactResult(t *testing.T) {
 		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
 	}
 
-	path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+	path := make([]PolyRef, 256)
+	pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 	if err != nil {
 		t.Fatalf("FindPath: %v", err)
 	}

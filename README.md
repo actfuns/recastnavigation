@@ -32,35 +32,35 @@
 | 包 | 状态 | 说明 |
 |----|------|------|
 | `recast` | ✅ 完成 | 导航网格生成核心功能，已移植 C++ 单元测试 |
-| `detour` | ✅ 完成 | 路径寻路与查询，含序列化，算法逻辑与 C++ 完全一致 |
+| `detour` | ✅ 完成 | 路径寻路与查询，含序列化，寻路**0 alloc**，算法逻辑与 C++ 完全一致 |
 | `detour_crowd` | ✅ 完成 | 群体移动与碰撞避免，已移植 C++ 单元测试 |
 | `detour_tile_cache` | ✅ 完成 | 分块流式加载与动态障碍，含 Go/C++ 对比测试 |
 | `debug_utils` | ✅ 基本完成 | 调试绘制 |
 
 ## 性能基准
 
-### 寻路性能（i5-13400, 20×20 网格, 800 个多边形）
+### 寻路性能（i5-13400, 20×20 网格, 800 个多边形，**0 alloc**）
 
-| 测试 | 耗时 (ns/op) | 分配 (B/op) | 分配次数 |
-|------|-------------:|-----------:|--------:|
-| **FindPath** (5 格) | 7,771 | 16,384 | 1 |
-| **FindPath** (10 格) | 8,992 | 16,384 | 1 |
-| **FindPath** (19 格) | 10,426 | 16,384 | 1 |
-| **FindStraightPath** (39 多边形路径) | 1,597 | 4,448 | 5 |
-| **Raycast** (5 格) | 509 | 0 | 0 |
-| **Raycast** (10 格) | 1,136 | 0 | 0 |
-| **Raycast** (19 格) | 2,132 | 0 | 0 |
-| **FindPolysAroundCircle** (r=50) | 16,429 | 0 | 0 |
-| **FindPolysAroundCircle** (r=100) | 42,897 | 0 | 0 |
-| **FindPolysAroundCircle** (r=200) | 46,829 | 0 | 0 |
+| 测试 | 耗时 (ns/op) | vs C++ | 分配 (B/op) | 分配次数 |
+|------|-------------:|-------:|-----------:|--------:|
+| **FindPath** (5 格) | 580 | ×1.39 | 0 | 0 |
+| **FindPath** (10 格) | 1,210 | ×1.34 | 0 | 0 |
+| **FindPath** (19 格) | 2,200 | ×1.39 | 0 | 0 |
+| **FindStraightPath** (20 多边形路径) | 840 | ×2.26 | 0 | 0 |
+| **Raycast** (5 格) | 164 | ×4.0 | 0 | 0 |
+| **Raycast** (10 格) | 392 | ×9.3 | 0 | 0 |
+| **Raycast** (19 格) | 710 | ×17.8 | 0 | 0 |
+| **FindPolysAroundCircle** (r=50) | 11,750 | ×1.70 | 0 | 0 |
+| **FindPolysAroundCircle** (r=100) | 33,250 | ×2.84 | 0 | 0 |
+| **FindPolysAroundCircle** (r=150) | 37,700 | — | 0 | 0 |
 
 ### 导航网格构建
 
 | 网格规模 | 多边形数 | 耗时 (ns/op) | 分配 (B/op) |
 |---------|--------:|------------:|-----------:|
-| 10×10 | 200 | 17,807 | 48,008 |
-| 50×50 | 5,000 | 452,598 | 1,163,529 |
-| 100×100 | 20,000 | 1,969,724 | 4,571,403 |
+| 10×10 | 200 | 16,800 | 48,008 |
+| 50×50 | 5,000 | 387,000 | 1,163,641 |
+| 100×100 | 20,000 | 1,676,000 | 4,571,518 |
 
 运行基准测试：
 
@@ -125,16 +125,21 @@ func main() {
 		panic("找不到结束多边形")
 	}
 
-	// 5. A* 寻路
-	path, npath, err := query.FindPath(startRef, endRef, startPt, endPos, filter, 4096)
+	// 5. A* 寻路（传入预分配切片，0 alloc）
+	path := make([]detour.PolyRef, 4096)
+	npath, err := query.FindPath(startRef, endRef, startPt, endPos, filter, path)
 	if err != nil || npath == 0 {
 		panic("找不到路径")
 	}
+	path = path[:npath]
 	fmt.Printf("找到路径，%d 个多边形\n", npath)
 
-	// 6. 拉直路径（生成可用的路点）
-	straightPath, _, _, nstraight, err := query.FindStraightPath(
-		startPt, endPos, path[:npath], npath, 4096, 0)
+	// 6. 拉直路径（生成可用的路点，传入预分配切片）
+	straightPath := make([]float32, 4096*3)
+	straightFlags := make([]uint8, 4096)
+	straightRefs := make([]detour.PolyRef, 4096)
+	nstraight, err := query.FindStraightPath(
+		startPt, endPos, path, npath, straightPath, straightFlags, straightRefs, 4096, 0)
 	if err != nil {
 		panic("拉直路径失败")
 	}
@@ -365,7 +370,7 @@ go test ./...
 ## 与原 C++ 版本差异
 
 - 使用 Go 的 `[3]float32`（定长数组）代替 C++ 的 `float*` 和 `float[3]`，避免切片索引越界
-- 函数返回值风格：C++ 使用输出参数 + 返回状态码，Go 使用多返回值（`result, err`）
+- 函数返回值风格：C++ 使用输出参数 + 返回状态码，Go 使用多返回值（`result, err`），热路径函数使用指针参数减少拷贝（如 `getPortalPoints`）
 - 使用 `encoding/binary` + 手动序列化代替 C++ 的 `memcpy` 结构体序列化，确保二进制兼容
 - 使用 Go 的垃圾回收代替 C++ 的手动内存池管理
 - 去除了 C++ 的虚函数回调机制，改用 Go 接口

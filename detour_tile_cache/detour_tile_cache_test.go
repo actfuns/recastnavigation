@@ -1584,7 +1584,8 @@ func TestTileCacheFindPath(t *testing.T) {
 		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
 	}
 
-	path, n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	path := make([]detour.PolyRef, 4096)
+	n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 	if err != nil {
 		t.Fatalf("FindPath: %v", err)
 	}
@@ -1639,12 +1640,17 @@ func TestTileCacheFindStraightPath(t *testing.T) {
 		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
 	}
 
-	path, n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	path := make([]detour.PolyRef, 4096)
+	n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 	if err != nil || n == 0 {
 		t.Fatalf("FindPath: %v", err)
 	}
 
-	_, _, _, straightN, err := q.FindStraightPath(startPos, endPos, path, n, 256, 0)
+	straightVerts := make([]float32, 256*3)
+	straightFlags := make([]uint8, 256)
+	straightPolys := make([]detour.PolyRef, 256)
+	straightN, err := q.FindStraightPath(startPos, endPos, path, n,
+		straightVerts, straightFlags, straightPolys, 256, 0)
 	if err != nil {
 		t.Fatalf("FindStraightPath: %v", err)
 	}
@@ -1701,7 +1707,8 @@ func TestTileCacheObstacleBlocksPath(t *testing.T) {
 		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
 	}
 
-	pathBefore, nBefore, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	pathBefore := make([]detour.PolyRef, 4096)
+	nBefore, err := q.FindPath(startRef, endRef, startPos, endPos, filter, pathBefore)
 	if err != nil || nBefore == 0 {
 		t.Fatalf("FindPath before obstacle: n=%d err=%v", nBefore, err)
 	}
@@ -1728,7 +1735,8 @@ func TestTileCacheObstacleBlocksPath(t *testing.T) {
 	startRef2, _, _ := q.FindNearestPoly(startPos, halfExtents, filter)
 	endRef2, _, _ := q.FindNearestPoly(endPos, halfExtents, filter)
 
-	pathAfter, nAfter, err := q.FindPath(startRef2, endRef2, startPos, endPos, filter, 4096)
+	pathAfter := make([]detour.PolyRef, 4096)
+	nAfter, err := q.FindPath(startRef2, endRef2, startPos, endPos, filter, pathAfter)
 	if err != nil || nAfter == 0 {
 		t.Fatalf("FindPath after obstacle: n=%d err=%v", nAfter, err)
 	}

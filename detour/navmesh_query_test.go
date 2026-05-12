@@ -61,17 +61,15 @@ func TestBuildTestNavmesh(t *testing.T) {
 			t.Fatal("could not find start/end refs")
 		}
 
-		path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+		path := make([]PolyRef, 256)
+		n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath: %v", err)
 		}
-		if pathCount == 0 {
+		if n == 0 {
 			t.Fatal("FindPath returned empty path")
 		}
-		if len(path) == 0 {
-			t.Fatal("FindPath returned nil path")
-		}
-		t.Logf("FindPath: %d refs", pathCount)
+		t.Logf("FindPath: %d refs", n)
 	})
 
 	t.Run("FindPath same start and end", func(t *testing.T) {
@@ -81,11 +79,12 @@ func TestBuildTestNavmesh(t *testing.T) {
 			t.Skip("no start ref")
 		}
 
-		path, pathCount, err := q.FindPath(ref, ref, pos, pos, filter, 256)
+		path := make([]PolyRef, 256)
+		n, err := q.FindPath(ref, ref, pos, pos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath same: %v", err)
 		}
-		if pathCount == 0 && len(path) == 0 {
+		if n == 0 {
 			t.Fatal("FindPath same should return at least 1 ref")
 		}
 	})
@@ -96,26 +95,24 @@ func TestBuildTestNavmesh(t *testing.T) {
 		startRef, _, _ := q.FindNearestPoly(startPos, halfExtents, filter)
 		endRef, _, _ := q.FindNearestPoly(endPos, halfExtents, filter)
 
-		path, _, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
-		if err != nil || len(path) == 0 {
+		path := make([]PolyRef, 256)
+		n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
+		if err != nil || n == 0 {
 			t.Skip("no path found, skipping straight path test")
 		}
 
-		verts, flags, polys, nstraight, err := q.FindStraightPath(startPos, endPos, path, len(path), 64, 0)
+		straightVerts := make([]float32, 64*3)
+		straightFlags := make([]uint8, 64)
+		straightPolys := make([]PolyRef, 64)
+		nStraight, err := q.FindStraightPath(startPos, endPos, path, n,
+			straightVerts, straightFlags, straightPolys, 64, 0)
 		if err != nil {
 			t.Fatalf("FindStraightPath: %v", err)
 		}
-		if nstraight == 0 {
+		if nStraight == 0 {
 			t.Fatal("FindStraightPath returned 0 corners")
 		}
-		if len(verts) == 0 {
-			t.Fatal("FindStraightPath returned nil verts")
-		}
-		if len(flags) == 0 {
-			t.Fatal("FindStraightPath returned nil flags")
-		}
-		_ = polys
-		t.Logf("FindStraightPath: %d corners", nstraight)
+		t.Logf("FindStraightPath: %d corners", nStraight)
 	})
 
 	t.Run("Raycast across triangles", func(t *testing.T) {
@@ -503,7 +500,8 @@ func TestFindPathMultiplePairs(t *testing.T) {
 				t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
 			}
 
-			path, pathCount, err := q.FindPath(startRef, endRef, tt.start, tt.end, filter, 256)
+			path := make([]PolyRef, 256)
+			pathCount, err := q.FindPath(startRef, endRef, tt.start, tt.end, filter, path)
 			if err != nil {
 				t.Fatalf("FindPath: %v", err)
 			}
@@ -517,6 +515,79 @@ func TestFindPathMultiplePairs(t *testing.T) {
 				t.Errorf("path[%d] = %d, expected endRef %d", pathCount-1, path[pathCount-1], endRef)
 			}
 			t.Logf("path=%v (count=%d)", path[:pathCount], pathCount)
+		})
+	}
+}
+
+// TestGrid20x20FindPathConsistency verifies pathfinding results against C++.
+// C++ (20x20 grid, cellSize=10) outputs:
+//
+//	straightPath[2]: (2.0,0.0,2.0) (192.0,0.0,2.0)
+func TestGrid20x20FindPathConsistency(t *testing.T) {
+	rows, cols := 20, 20
+	cellSize := float32(10)
+	m := buildTestGridNavmesh(t, rows, cols, cellSize)
+	q := createTestQuery(t, m)
+
+	filter := &QueryFilter{IncludeFlags: 0xffff, ExcludeFlags: 0}
+	for i := range filter.AreaCost {
+		filter.AreaCost[i] = 1.0
+	}
+	halfExtents := [3]float32{10, 2, 10}
+
+	type pathCase struct {
+		name       string
+		start, end [3]float32
+	}
+	cases := []pathCase{
+		{"near_5cells", [3]float32{2, 0, 2}, [3]float32{42, 0, 2}},
+		{"mid_10cells", [3]float32{2, 0, 2}, [3]float32{102, 0, 2}},
+		{"far_19cells", [3]float32{2, 0, 2}, [3]float32{192, 0, 2}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			startRef, _, err := q.FindNearestPoly(c.start, halfExtents, filter)
+			if err != nil || startRef == 0 {
+				t.Fatalf("FindNearestPoly start: ref=%d err=%v", startRef, err)
+			}
+			endRef, _, err := q.FindNearestPoly(c.end, halfExtents, filter)
+			if err != nil || endRef == 0 {
+				t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
+			}
+
+			path := make([]PolyRef, 4096)
+			n, err := q.FindPath(startRef, endRef, c.start, c.end, filter, path)
+			if err != nil {
+				t.Fatalf("FindPath: %v", err)
+			}
+			if n < 2 {
+				t.Fatalf("FindPath returned %d refs, expected >=2", n)
+			}
+
+			// Verify straight path corners match C++ exactly.
+			// C++ far_19cells straightPath[2]: (2.0,0.0,2.0) (192.0,0.0,2.0)
+			straightVerts := make([]float32, 256*3)
+			straightFlags := make([]uint8, 256)
+			straightRefs := make([]PolyRef, 256)
+			ns, err := q.FindStraightPath(c.start, c.end, path, n,
+				straightVerts, straightFlags, straightRefs, 256, 0)
+			if err != nil {
+				t.Fatalf("FindStraightPath: %v", err)
+			}
+
+			// All paths on this grid start at (2,0,2) and end at (*,0,2) — straight line along x-axis
+			if ns != 2 {
+				t.Fatalf("expected 2 straight path corners, got %d", ns)
+			}
+			if straightVerts[0] != c.start[0] || straightVerts[1] != 0 || straightVerts[2] != c.start[2] {
+				t.Errorf("start point mismatch: got (%.1f,%.1f,%.1f), expected (%.1f,%.1f,%.1f)",
+					straightVerts[0], straightVerts[1], straightVerts[2], c.start[0], c.start[1], c.start[2])
+			}
+			if straightVerts[3] != c.end[0] || straightVerts[4] != 0 || straightVerts[5] != c.end[2] {
+				t.Errorf("end point mismatch: got (%.1f,%.1f,%.1f), expected (%.1f,%.1f,%.1f)",
+					straightVerts[3], straightVerts[4], straightVerts[5], c.end[0], c.end[1], c.end[2])
+			}
 		})
 	}
 }
@@ -561,7 +632,8 @@ func TestGridNavmeshFindPath(t *testing.T) {
 			t.Fatal("could not find start/end refs")
 		}
 
-		path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+		path := make([]PolyRef, 256)
+		pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath: %v", err)
 		}
@@ -584,7 +656,8 @@ func TestGridNavmeshFindPath(t *testing.T) {
 			t.Fatal("could not find start/end refs")
 		}
 
-		path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+		path := make([]PolyRef, 256)
+		pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath: %v", err)
 		}
@@ -610,7 +683,8 @@ func TestGridNavmeshFindPath(t *testing.T) {
 			t.Fatal("could not find start/end refs")
 		}
 
-		path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+		path := make([]PolyRef, 256)
+		pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath: %v", err)
 		}
@@ -636,7 +710,8 @@ func TestGridNavmeshFindPath(t *testing.T) {
 			t.Fatal("could not find start/end refs")
 		}
 
-		path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+		path := make([]PolyRef, 256)
+		pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath: %v", err)
 		}
@@ -663,7 +738,8 @@ func TestGridNavmeshFindPath(t *testing.T) {
 		}
 
 		// Determinism check: second query returns identical result
-		path2, pathCount2, err2 := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+		path2 := make([]PolyRef, 256)
+		pathCount2, err2 := q.FindPath(startRef, endRef, startPos, endPos, filter, path2)
 		if err2 != nil {
 			t.Fatalf("FindPath second call: %v", err2)
 		}
@@ -684,7 +760,8 @@ func TestGridNavmeshFindPath(t *testing.T) {
 			t.Fatal("no ref")
 		}
 
-		path, pathCount, err := q.FindPath(ref, ref, pos, pos, filter, 256)
+		path := make([]PolyRef, 256)
+		pathCount, err := q.FindPath(ref, ref, pos, pos, filter, path)
 		if err != nil {
 			t.Fatalf("FindPath same: %v", err)
 		}
@@ -717,34 +794,43 @@ func TestGridNavmeshStraightPath(t *testing.T) {
 		t.Fatal("could not find start/end refs")
 	}
 
-	path, pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 256)
+	path := make([]PolyRef, 256)
+	pathCount, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 	if err != nil || pathCount == 0 {
 		t.Fatal("no path found")
 	}
 
 	t.Run("FindStraightPath", func(t *testing.T) {
-		verts, flags, polys, nstraight, err := q.FindStraightPath(startPos, endPos, path, pathCount, 64, 0)
+		straightVerts := make([]float32, 64*3)
+		straightFlags := make([]uint8, 64)
+		straightPolys := make([]PolyRef, 64)
+		nStraight, err := q.FindStraightPath(startPos, endPos, path, pathCount,
+			straightVerts, straightFlags, straightPolys, 64, 0)
 		if err != nil {
 			t.Fatalf("FindStraightPath: %v", err)
 		}
-		if nstraight < 2 {
+		if nStraight < 2 {
 			t.Fatal("straight path should have at least 2 corners (start+end)")
 		}
-		t.Logf("straight path: %d corners", nstraight)
-		for i := 0; i < nstraight; i++ {
+		t.Logf("straight path: %d corners", nStraight)
+		for i := 0; i < nStraight; i++ {
 			t.Logf("  corner %d: (%0.1f,%0.1f,%0.1f) flags=%d poly=%d",
-				i, verts[i*3], verts[i*3+1], verts[i*3+2], flags[i], polys[i])
+				i, straightVerts[i*3], straightVerts[i*3+1], straightVerts[i*3+2], straightFlags[i], straightPolys[i])
 		}
 	})
 
 	t.Run("FindStraightPath with area crossings", func(t *testing.T) {
-		_, _, _, nstraight, err := q.FindStraightPath(startPos, endPos, path, pathCount, 64, StraightPathAreaCrossings)
+		straightVerts := make([]float32, 64*3)
+		straightFlags := make([]uint8, 64)
+		straightPolys := make([]PolyRef, 64)
+		nStraight, err := q.FindStraightPath(startPos, endPos, path, pathCount,
+			straightVerts, straightFlags, straightPolys, 64, StraightPathAreaCrossings)
 		if err != nil {
 			t.Fatalf("FindStraightPath area crossings: %v", err)
 		}
-		if nstraight < 2 {
+		if nStraight < 2 {
 			t.Fatal("straight path should have at least 2 corners")
 		}
-		t.Logf("straight path (area crossings): %d corners", nstraight)
+		t.Logf("straight path (area crossings): %d corners", nStraight)
 	})
 }

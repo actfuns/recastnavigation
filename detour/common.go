@@ -272,20 +272,30 @@ func IntersectSegmentPoly2D(p0, p1 [3]float32, verts []float32, nverts int) (boo
 	segMin := -1
 	segMax := -1
 
-	dir := Vsub(p1, p0)
+	dir0 := p1[0] - p0[0]
+	dir2 := p1[2] - p0[2]
 
 	for i, j := 0, nverts-1; i < nverts; j, i = i, i+1 {
-		edge := Vsub(
-			[3]float32{verts[i*3], verts[i*3+1], verts[i*3+2]},
-			[3]float32{verts[j*3], verts[j*3+1], verts[j*3+2]},
-		)
-		diff := Vsub(
-			p0,
-			[3]float32{verts[j*3], verts[j*3+1], verts[j*3+2]},
-		)
-		n := Vperp2D(edge, diff)
-		d := Vperp2D(dir, edge)
-		if float32(math.Abs(float64(d))) < eps {
+		vi0 := verts[i*3]
+		vi2 := verts[i*3+2]
+		vj0 := verts[j*3]
+		vj2 := verts[j*3+2]
+
+		// edge = verts[i] - verts[j]
+		e0 := vi0 - vj0
+		e2 := vi2 - vj2
+
+		// diff = p0 - verts[j]
+		d0 := p0[0] - vj0
+		d2 := p0[2] - vj2
+
+		// n = Vperp2D(edge, diff) = edge[2]*diff[0] - edge[0]*diff[2]
+		n := e2*d0 - e0*d2
+
+		// d = Vperp2D(dir, edge) = dir[2]*edge[0] - dir[0]*edge[2]
+		d := dir2*e0 - dir0*e2
+
+		if d < eps && d > -eps {
 			if n < 0 {
 				return false, 0, 0, 0, 0
 			}

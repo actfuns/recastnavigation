@@ -43,7 +43,8 @@ func benchRef(b *testing.B, q *NavMeshQuery, pos [3]float32, filter *QueryFilter
 // benchPath pre-computes a reference path, skipping benchmark on failure.
 func benchPath(b *testing.B, q *NavMeshQuery, startRef, endRef PolyRef, startPos, endPos [3]float32) ([]PolyRef, int) {
 	b.Helper()
-	path, n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	path := make([]PolyRef, 4096)
+	n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, path)
 	if err != nil || n == 0 {
 		b.Skip("no path found")
 	}
@@ -81,16 +82,16 @@ func BenchmarkFindPath(b *testing.B) {
 		endRef := benchRef(b, q, c.end, f, he)
 
 		b.Run(c.name, func(b *testing.B) {
+			path := make([]PolyRef, 4096)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				path, n, err := q.FindPath(startRef, endRef, c.start, c.end, f, 4096)
+				n, err := q.FindPath(startRef, endRef, c.start, c.end, f, path)
 				if err != nil {
 					b.Fatalf("FindPath: %v", err)
 				}
 				if n == 0 {
 					b.Fatal("empty path")
 				}
-				_ = path
 			}
 		})
 	}
@@ -102,6 +103,7 @@ func BenchmarkFindPath(b *testing.B) {
 
 func BenchmarkFindStraightPath(b *testing.B) {
 	_, q, f, he := benchSetup(b)
+	filter = f
 
 	start := [3]float32{2, 0, 2}
 	end := [3]float32{192, 0, 2}
@@ -109,11 +111,14 @@ func BenchmarkFindStraightPath(b *testing.B) {
 	startRef := benchRef(b, q, start, f, he)
 	endRef := benchRef(b, q, end, f, he)
 	path, pathCount := benchPath(b, q, startRef, endRef, start, end)
-	b.Logf("reference path: %d polys", pathCount)
+
+	straight := make([]float32, 256*3)
+	flags := make([]uint8, 256)
+	refs := make([]PolyRef, 256)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _, n, err := q.FindStraightPath(start, end, path, pathCount, 256, 0)
+		n, err := q.FindStraightPath(start, end, path, pathCount, straight, flags, refs, 256, 0)
 		if err != nil {
 			b.Fatalf("FindStraightPath: %v", err)
 		}
@@ -171,7 +176,7 @@ func BenchmarkFindPolysAroundCircle(b *testing.B) {
 	center := [3]float32{102, 0, 102}
 	ref := benchRef(b, q, center, f, he)
 
-	for _, radius := range []float32{50, 100, 200} {
+	for _, radius := range []float32{50, 100, 150} {
 		b.Run(fmt.Sprintf("r%.0f", radius), func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
