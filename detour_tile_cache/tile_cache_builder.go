@@ -1165,6 +1165,7 @@ func simplifyContour(cont *dtTempContour, maxError float32) {
 		}
 	}
 	if cont.npoly < 2 {
+		// Find lower-left and upper-right vertices of the contour.
 		llx := int(cont.verts[0])
 		llz := int(cont.verts[2])
 		lli := 0

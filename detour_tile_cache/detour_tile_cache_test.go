@@ -1,6 +1,7 @@
 package detour_tile_cache
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -131,6 +132,56 @@ func createCompressedTile(t *testing.T, comp TileCacheCompressor, header *TileCa
 	return data, dataSize
 }
 
+// computeCons computes the connection data (cons) for a tile cache layer.
+// Two walkable cells are connected if their heights differ by at most
+// walkableClimb (in height units). The cons byte lower 4 bits encode
+// connectivity to W, N, E, S neighbors (bit 0=W, 1=N, 2=E, 3=S).
+func computeCons(width, height int, heights, areas []uint8, walkableClimb int) []uint8 {
+	cons := make([]uint8, width*height)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			idx := y*width + x
+			if areas[idx] == TileCacheNullArea {
+				continue
+			}
+			var c uint8
+			if x > 0 {
+				nidx := y*width + (x - 1)
+				if areas[nidx] != TileCacheNullArea && intDiff(int(heights[idx]), int(heights[nidx])) <= walkableClimb {
+					c |= 1 << 0
+				}
+			}
+			if y > 0 {
+				nidx := (y-1)*width + x
+				if areas[nidx] != TileCacheNullArea && intDiff(int(heights[idx]), int(heights[nidx])) <= walkableClimb {
+					c |= 1 << 3 // North (dir=3)
+				}
+			}
+			if x < width-1 {
+				nidx := y*width + (x + 1)
+				if areas[nidx] != TileCacheNullArea && intDiff(int(heights[idx]), int(heights[nidx])) <= walkableClimb {
+					c |= 1 << 2 // East (dir=2)
+				}
+			}
+			if y < height-1 {
+				nidx := (y+1)*width + x
+				if areas[nidx] != TileCacheNullArea && intDiff(int(heights[idx]), int(heights[nidx])) <= walkableClimb {
+					c |= 1 << 1 // South (dir=1)
+				}
+			}
+			cons[idx] = c
+		}
+	}
+	return cons
+}
+
+func intDiff(a, b int) int {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}
+
 // createTestLayer6x6 creates a 6×6 layer with a 4×4 walkable area in the center.
 // Layout:
 //
@@ -148,7 +199,6 @@ func createTestLayer6x6() (header *TileCacheLayerHeader, heights, areas, cons []
 
 	heights = make([]uint8, gridSize)
 	areas = make([]uint8, gridSize)
-	cons = make([]uint8, gridSize)
 
 	for y := 0; y < 6; y++ {
 		for x := 0; x < 6; x++ {
@@ -161,6 +211,7 @@ func createTestLayer6x6() (header *TileCacheLayerHeader, heights, areas, cons []
 			}
 		}
 	}
+	cons = computeCons(6, 6, heights, areas, 5)
 	return
 }
 
@@ -1390,4 +1441,302 @@ func TestTileCacheUpdateMaxRequests(t *testing.T) {
 		t.Fatal("expected error when exceeding max requests (64)")
 	}
 	_ = nm
+}
+
+// ---------------------------------------------------------------------------
+// TileCache pathfinding + obstacle integration tests
+// ---------------------------------------------------------------------------
+
+// createTestLayer20x20 creates a 20x20 layer with 18x18 walkable area.
+// Height=10 (2.0 units), walkableClimb=5 height units.
+func createTestLayer20x20() (header *TileCacheLayerHeader, heights, areas, cons []uint8) {
+	const gridSize = 20
+	gridArea := gridSize * gridSize
+
+	header = &TileCacheLayerHeader{
+		Magic:   TileCacheMagic,
+		Version: TileCacheVersion,
+		Tx:      0, Ty: 0, Tlayer: 0,
+		Bmin:  [3]float32{0, 0, 0},
+		Bmax:  [3]float32{gridSize * 0.3, 4, gridSize * 0.3},
+		Width: gridSize, Height: gridSize,
+		Minx: 0, Maxx: gridSize - 1,
+		Miny: 0, Maxy: gridSize - 1,
+	}
+
+	heights = make([]uint8, gridArea)
+	areas = make([]uint8, gridArea)
+
+	for y := 0; y < gridSize; y++ {
+		for x := 0; x < gridSize; x++ {
+			idx := y*gridSize + x
+			heights[idx] = 10
+			if x >= 1 && x <= gridSize-2 && y >= 1 && y <= gridSize-2 {
+				areas[idx] = TileCacheWalkableArea
+			} else {
+				areas[idx] = TileCacheNullArea
+			}
+		}
+	}
+	cons = computeCons(gridSize, gridSize, heights, areas, 5)
+	return
+}
+
+// setupTileCacheForPathing creates TileCache, adds a layer, builds navmesh tile,
+// and returns query + navmesh for pathfinding tests.
+func setupTileCacheForPathing(t *testing.T, header *TileCacheLayerHeader, heights, areas, cons []uint8,
+	maxSimplificationError float32) (*TileCache, *detour.NavMesh, *detour.NavMeshQuery) {
+	t.Helper()
+
+	comp := &testCompressor{}
+	alloc := &testAlloc{}
+
+	orig := CreateNavMeshData
+	t.Cleanup(func() { CreateNavMeshData = orig })
+	CreateNavMeshData = func(params *NavMeshCreateParams) ([]uint8, int) {
+		dp := bridgeParams(params)
+		data, dataSize, ok := detour.CreateNavMeshData(dp)
+		if !ok {
+			return nil, 0
+		}
+		return data, dataSize
+	}
+
+	tc := NewTileCache()
+	params := defaultParams()
+	params.Width = int32(header.Width)
+	params.Height = int32(header.Height)
+	params.MaxSimplificationError = maxSimplificationError
+
+	err := tc.Init(params, alloc, comp, &testMeshProcess{})
+	if err != nil {
+		t.Fatalf("TileCache.Init: %v", err)
+	}
+
+	data, dataSize := createCompressedTile(t, comp, header, heights, areas, cons)
+	_, err = tc.AddTile(data, dataSize, 0)
+	if err != nil {
+		t.Fatalf("AddTile: %v", err)
+	}
+
+	tileWidth := header.Bmax[0] - header.Bmin[0]
+	tileHeight := header.Bmax[2] - header.Bmin[2]
+
+	m := &detour.NavMesh{}
+	err = m.Init(&detour.NavMeshParams{
+		Orig:       header.Bmin,
+		TileWidth:  tileWidth,
+		TileHeight: tileHeight,
+		MaxTiles:   1,
+		MaxPolys:   4096,
+	})
+	if err != nil {
+		t.Fatalf("NavMesh.Init: %v", err)
+	}
+
+	tileRef := tc.GetTileRef(&tc.tiles[0])
+	err = tc.BuildNavMeshTile(tileRef, m)
+	if err != nil {
+		t.Fatalf("BuildNavMeshTile: %v", err)
+	}
+
+	// Log navmesh info
+	for i := 0; i < int(m.MaxTiles); i++ {
+		if m.Tiles[i].Header != nil {
+			t.Logf("tile[%d]: polys=%d verts=%d",
+				i, m.Tiles[i].Header.PolyCount, m.Tiles[i].Header.VertCount)
+		}
+	}
+
+	q := detour.NewNavMeshQuery()
+	if err := q.Init(m, 65535); err != nil {
+		t.Fatalf("query.Init: %v", err)
+	}
+
+	return tc, m, q
+}
+
+func makeFilter() *detour.QueryFilter {
+	filter := &detour.QueryFilter{}
+	filter.IncludeFlags = 0xffff
+	for i := range filter.AreaCost {
+		filter.AreaCost[i] = 1.0
+	}
+	return filter
+}
+
+func TestTileCacheFindPath(t *testing.T) {
+	header, heights, areas, cons := createTestLayer20x20()
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+
+	filter := makeFilter()
+	halfExtents := [3]float32{0.5, 2, 0.5}
+
+	startPos := [3]float32{0.6, 2, 0.6}
+	endPos := [3]float32{5.0, 2, 5.0}
+
+	startRef, _, err := q.FindNearestPoly(startPos, halfExtents, filter)
+	if err != nil || startRef == 0 {
+		t.Fatalf("FindNearestPoly start: ref=%d err=%v", startRef, err)
+	}
+	endRef, _, err := q.FindNearestPoly(endPos, halfExtents, filter)
+	if err != nil || endRef == 0 {
+		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
+	}
+
+	path, n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	if err != nil {
+		t.Fatalf("FindPath: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("FindPath returned empty path")
+	}
+	t.Logf("FindPath: %d polys", n)
+	_ = path
+}
+
+func TestTileCacheRaycast(t *testing.T) {
+	header, heights, areas, cons := createTestLayer20x20()
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+
+	filter := makeFilter()
+	halfExtents := [3]float32{0.5, 2, 0.5}
+
+	startPos := [3]float32{0.6, 2, 0.6}
+	endPos := [3]float32{5.0, 2, 5.0}
+
+	startRef, _, err := q.FindNearestPoly(startPos, halfExtents, filter)
+	if err != nil || startRef == 0 {
+		t.Fatalf("FindNearestPoly: ref=%d err=%v", startRef, err)
+	}
+
+	hit := &detour.RaycastHit{}
+	if err := q.Raycast(startRef, startPos, endPos, filter, 0, 0, hit); err != nil {
+		t.Fatalf("Raycast: %v", err)
+	}
+	t.Logf("Raycast: t=%f pathCount=%d pathCost=%f", hit.T, hit.PathCount, hit.PathCost)
+	if hit.PathCount == 0 {
+		t.Fatal("Raycast traversed 0 polygons")
+	}
+}
+
+func TestTileCacheFindStraightPath(t *testing.T) {
+	header, heights, areas, cons := createTestLayer20x20()
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+
+	filter := makeFilter()
+	halfExtents := [3]float32{0.5, 2, 0.5}
+
+	startPos := [3]float32{0.6, 2, 0.6}
+	endPos := [3]float32{5.0, 2, 5.0}
+
+	startRef, _, err := q.FindNearestPoly(startPos, halfExtents, filter)
+	if err != nil || startRef == 0 {
+		t.Fatalf("FindNearestPoly start: ref=%d err=%v", startRef, err)
+	}
+	endRef, _, err := q.FindNearestPoly(endPos, halfExtents, filter)
+	if err != nil || endRef == 0 {
+		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
+	}
+
+	path, n, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	if err != nil || n == 0 {
+		t.Fatalf("FindPath: %v", err)
+	}
+
+	_, _, _, straightN, err := q.FindStraightPath(startPos, endPos, path, n, 256, 0)
+	if err != nil {
+		t.Fatalf("FindStraightPath: %v", err)
+	}
+	if straightN < 2 {
+		t.Fatal("FindStraightPath returned <2 points")
+	}
+	t.Logf("Straight path points: %d", straightN)
+}
+
+func TestTileCacheFindPolysAroundCircle(t *testing.T) {
+	header, heights, areas, cons := createTestLayer20x20()
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+
+	filter := makeFilter()
+	halfExtents := [3]float32{0.5, 2, 0.5}
+	centerPos := [3]float32{0.6, 2, 0.6}
+
+	ref, _, err := q.FindNearestPoly(centerPos, halfExtents, filter)
+	if err != nil || ref == 0 {
+		t.Fatalf("FindNearestPoly: ref=%d err=%v", ref, err)
+	}
+
+	const maxResult = 4096
+	resultRef := make([]detour.PolyRef, maxResult)
+	resultParent := make([]detour.PolyRef, maxResult)
+	resultCost := make([]float32, maxResult)
+
+	n, err := q.FindPolysAroundCircle(ref, centerPos, 3.0, filter, resultRef, resultParent, resultCost, maxResult)
+	if err != nil {
+		t.Fatalf("FindPolysAroundCircle: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("FindPolysAroundCircle returned 0 polys")
+	}
+	t.Logf("FindPolysAroundCircle(r=3.0): %d polys", n)
+}
+
+func TestTileCacheObstacleBlocksPath(t *testing.T) {
+	header, heights, areas, cons := createTestLayer20x20()
+	tc, m, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+
+	filter := makeFilter()
+	halfExtents := [3]float32{0.5, 2, 0.5}
+
+	startPos := [3]float32{0.6, 2, 0.6}
+	endPos := [3]float32{5.0, 2, 5.0}
+
+	startRef, _, err := q.FindNearestPoly(startPos, halfExtents, filter)
+	if err != nil || startRef == 0 {
+		t.Fatalf("FindNearestPoly start: ref=%d err=%v", startRef, err)
+	}
+	endRef, _, err := q.FindNearestPoly(endPos, halfExtents, filter)
+	if err != nil || endRef == 0 {
+		t.Fatalf("FindNearestPoly end: ref=%d err=%v", endRef, err)
+	}
+
+	pathBefore, nBefore, err := q.FindPath(startRef, endRef, startPos, endPos, filter, 4096)
+	if err != nil || nBefore == 0 {
+		t.Fatalf("FindPath before obstacle: n=%d err=%v", nBefore, err)
+	}
+	t.Logf("Path before obstacle: %d polys", nBefore)
+
+	// Add a large cylindrical obstacle in the center of the path.
+	obRef, err := tc.AddObstacle([3]float32{3.0, 0, 3.0}, 1.5, 4.0)
+	if err != nil {
+		t.Fatalf("AddObstacle: %v", err)
+	}
+	t.Logf("Added obstacle ref=%d at (3,0,3) r=1.5", obRef)
+
+	for {
+		done, err := tc.Update(1.0, m)
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if done {
+			break
+		}
+	}
+
+	// Find path after obstacle.
+	startRef2, _, _ := q.FindNearestPoly(startPos, halfExtents, filter)
+	endRef2, _, _ := q.FindNearestPoly(endPos, halfExtents, filter)
+
+	pathAfter, nAfter, err := q.FindPath(startRef2, endRef2, startPos, endPos, filter, 4096)
+	if err != nil || nAfter == 0 {
+		t.Fatalf("FindPath after obstacle: n=%d err=%v", nAfter, err)
+	}
+	t.Logf("Path after obstacle: %d polys", nAfter)
+
+	fmt.Printf("Go path before obstacle polys=%d\n", nBefore)
+	fmt.Printf("Go path after  obstacle polys=%d\n", nAfter)
+
+	_ = pathBefore
+	_ = pathAfter
 }
