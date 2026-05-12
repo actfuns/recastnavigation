@@ -263,15 +263,14 @@ func ClosestPtPointTriangle(p, a, b, c [3]float32) [3]float32 {
 	return [3]float32{a[0] + ab[0]*v + ac[0]*w, a[1] + ab[1]*v + ac[1]*w, a[2] + ab[2]*v + ac[2]*w}
 }
 
-// intersectSegPoly2D is the inlinable version of IntersectSegmentPoly2D.
-// Returns false if no intersection. Results written to tmin/tmax/segMin/segMax pointers.
-func intersectSegPoly2D(p0, p1 [3]float32, verts []float32, nverts int, tmin, tmax *float32, segMin, segMax *int) bool {
+// IntersectSegmentPoly2D checks segment-polygon intersection on the xz-plane.
+func IntersectSegmentPoly2D(p0, p1 [3]float32, verts []float32, nverts int) (bool, float32, float32, int, int) {
 	const eps = 0.000001
 
-	*tmin = 0
-	*tmax = 1
-	*segMin = -1
-	*segMax = -1
+	tmin := float32(0)
+	tmax := float32(1)
+	segMin := -1
+	segMax := -1
 
 	dir0 := p1[0] - p0[0]
 	dir2 := p1[2] - p0[2]
@@ -282,49 +281,47 @@ func intersectSegPoly2D(p0, p1 [3]float32, verts []float32, nverts int, tmin, tm
 		vj0 := verts[j*3]
 		vj2 := verts[j*3+2]
 
+		// edge = verts[i] - verts[j]
 		e0 := vi0 - vj0
 		e2 := vi2 - vj2
 
+		// diff = p0 - verts[j]
 		d0 := p0[0] - vj0
 		d2 := p0[2] - vj2
 
+		// n = Vperp2D(edge, diff) = edge[2]*diff[0] - edge[0]*diff[2]
 		n := e2*d0 - e0*d2
+
+		// d = Vperp2D(dir, edge) = dir[2]*edge[0] - dir[0]*edge[2]
 		d := dir2*e0 - dir0*e2
 
 		if d < eps && d > -eps {
 			if n < 0 {
-				return false
+				return false, 0, 0, 0, 0
 			}
 			continue
 		}
 		t := n / d
 		if d < 0 {
-			if t > *tmin {
-				*tmin = t
-				*segMin = j
-				if *tmin > *tmax {
-					return false
+			if t > tmin {
+				tmin = t
+				segMin = j
+				if tmin > tmax {
+					return false, 0, 0, 0, 0
 				}
 			}
 		} else {
-			if t < *tmax {
-				*tmax = t
-				*segMax = j
-				if *tmax < *tmin {
-					return false
+			if t < tmax {
+				tmax = t
+				segMax = j
+				if tmax < tmin {
+					return false, 0, 0, 0, 0
 				}
 			}
 		}
 	}
-	return true
-}
 
-// IntersectSegmentPoly2D checks segment-polygon intersection on the xz-plane.
-func IntersectSegmentPoly2D(p0, p1 [3]float32, verts []float32, nverts int) (bool, float32, float32, int, int) {
-	var tmin, tmax float32
-	var segMin, segMax int
-	ok := intersectSegPoly2D(p0, p1, verts, nverts, &tmin, &tmax, &segMin, &segMax)
-	return ok, tmin, tmax, segMin, segMax
+	return true, tmin, tmax, segMin, segMax
 }
 
 // DistancePtSegSqr2D computes the squared distance between a point and a segment in 2D.
