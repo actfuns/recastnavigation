@@ -924,74 +924,49 @@ func bytesToFloat32(b []byte) float32 {
 }
 
 func readFloat32Slice(data []byte, size int) []float32 {
-	count := size / 4
-	result := make([]float32, count)
-	for i := 0; i < count; i++ {
-		result[i] = bytesToFloat32(data[i*4 : i*4+4])
+	count := size / int(unsafe.Sizeof(float32(0)))
+	if count == 0 {
+		return nil
 	}
+	src := unsafe.Slice((*float32)(unsafe.Pointer(&data[0])), count)
+	result := make([]float32, count)
+	copy(result, src)
 	return result
 }
 
 func readPolySlice(data []byte, count int) []Poly {
-	result := make([]Poly, count)
-	for i := 0; i < count; i++ {
-		// Read Poly layout: firstLink(uint32) + verts(6*uint16) + neis(6*uint16) + flags(uint16) + vertCount(uint8) + areaAndtype(uint8)
-		offset := i * int(unsafeSizeOfPoly())
-		p := &result[i]
-		p.FirstLink = binary.LittleEndian.Uint32(data[offset:])
-		offset += 4
-		for j := 0; j < VertsPerPolygon; j++ {
-			p.Verts[j] = binary.LittleEndian.Uint16(data[offset:])
-			offset += 2
-		}
-		for j := 0; j < VertsPerPolygon; j++ {
-			p.Neis[j] = binary.LittleEndian.Uint16(data[offset:])
-			offset += 2
-		}
-		p.Flags = binary.LittleEndian.Uint16(data[offset:])
-		offset += 2
-		p.VertCount = data[offset]
-		offset++
-		p.areaAndtype = data[offset]
-		offset++
+	if count == 0 {
+		return nil
 	}
+	src := unsafe.Slice((*Poly)(unsafe.Pointer(&data[0])), count)
+	result := make([]Poly, count)
+	copy(result, src)
 	return result
 }
 
 func readLinkSlice(data []byte, count int) []Link {
-	result := make([]Link, count)
-	for i := 0; i < count; i++ {
-		offset := i * int(unsafeSizeOfLink())
-		l := &result[i]
-		l.Ref = PolyRef(binary.LittleEndian.Uint32(data[offset:]))
-		offset += 4
-		l.Next = binary.LittleEndian.Uint32(data[offset:])
-		offset += 4
-		l.Edge = data[offset]
-		offset++
-		l.Side = data[offset]
-		offset++
-		l.Bmin = data[offset]
-		offset++
-		l.Bmax = data[offset]
-		offset++
+	if count == 0 {
+		return nil
 	}
+	src := unsafe.Slice((*Link)(unsafe.Pointer(&data[0])), count)
+	result := make([]Link, count)
+	copy(result, src)
 	return result
 }
 
 func readPolyDetailSlice(data []byte, count int) []PolyDetail {
+	if count == 0 {
+		return nil
+	}
 	result := make([]PolyDetail, count)
+	const elemSize = 10 // 4 + 4 + 1 + 1 (serialized, no padding)
 	for i := 0; i < count; i++ {
-		offset := i * int(unsafeSizeOfPolyDetail())
+		off := i * elemSize
 		pd := &result[i]
-		pd.VertBase = binary.LittleEndian.Uint32(data[offset:])
-		offset += 4
-		pd.TriBase = binary.LittleEndian.Uint32(data[offset:])
-		offset += 4
-		pd.VertCount = data[offset]
-		offset++
-		pd.TriCount = data[offset]
-		offset++
+		pd.VertBase = binary.LittleEndian.Uint32(data[off:])
+		pd.TriBase = binary.LittleEndian.Uint32(data[off+4:])
+		pd.VertCount = data[off+8]
+		pd.TriCount = data[off+9]
 	}
 	return result
 }
@@ -1000,21 +975,9 @@ func readBVNodeSlice(data []byte, count int) []BVNode {
 	if count == 0 {
 		return nil
 	}
+	src := unsafe.Slice((*BVNode)(unsafe.Pointer(&data[0])), count)
 	result := make([]BVNode, count)
-	for i := 0; i < count; i++ {
-		offset := i * int(unsafeSizeOfBVNode())
-		n := &result[i]
-		for j := 0; j < 3; j++ {
-			n.Bmin[j] = binary.LittleEndian.Uint16(data[offset:])
-			offset += 2
-		}
-		for j := 0; j < 3; j++ {
-			n.Bmax[j] = binary.LittleEndian.Uint16(data[offset:])
-			offset += 2
-		}
-		n.I = int32(binary.LittleEndian.Uint32(data[offset:]))
-		offset += 4
-	}
+	copy(result, src)
 	return result
 }
 
@@ -1022,25 +985,9 @@ func readOffMeshConnectionSlice(data []byte, count int) []OffMeshConnection {
 	if count == 0 {
 		return nil
 	}
+	src := unsafe.Slice((*OffMeshConnection)(unsafe.Pointer(&data[0])), count)
 	result := make([]OffMeshConnection, count)
-	for i := 0; i < count; i++ {
-		offset := i * int(unsafeSizeOfOffMeshConnection())
-		c := &result[i]
-		for j := 0; j < 6; j++ {
-			c.Pos[j] = bytesToFloat32(data[offset:])
-			offset += 4
-		}
-		c.Rad = bytesToFloat32(data[offset:])
-		offset += 4
-		c.Poly = binary.LittleEndian.Uint16(data[offset:])
-		offset += 2
-		c.Flags = data[offset]
-		offset++
-		c.Side = data[offset]
-		offset++
-		c.UserID = binary.LittleEndian.Uint32(data[offset:])
-		offset += 4
-	}
+	copy(result, src)
 	return result
 }
 
