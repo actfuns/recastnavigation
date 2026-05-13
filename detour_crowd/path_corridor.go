@@ -2,6 +2,8 @@ package detour_crowd
 
 import (
 	"math"
+
+	"github.com/actfuns/recastnavigation/detour"
 )
 
 // PathCorridor represents a dynamic polygon corridor used to plan agent movement.
@@ -38,14 +40,12 @@ func (c *PathCorridor) Reset(ref PolyRef, pos [3]float32) {
 // FindCorners finds the corners in the corridor from the position toward the target.
 func (c *PathCorridor) FindCorners(cornerVerts []float32, cornerFlags []uint8,
 	cornerPolys []PolyRef, maxCorners int,
-	navquery NavMeshQueryInterface, filter *QueryFilter) int {
+	navquery *detour.NavMeshQuery, filter *QueryFilter) int {
 
 	const minTargetDist = 0.01
 
-	verts, flags, refs, ncorners, _ := navquery.FindStraightPath(c.pos, c.target, c.path[:c.npath], c.npath, maxCorners, 0)
-	copy(cornerVerts, verts)
-	copy(cornerFlags, flags)
-	copy(cornerPolys, refs)
+	verts, flags, refs := cornerVerts, cornerFlags, cornerPolys
+	ncorners, _ := navquery.FindStraightPath(c.pos, c.target, c.path[:c.npath], c.npath, verts, flags, refs, maxCorners, 0)
 
 	// Prune points in the beginning of the path which are too close.
 	for ncorners > 0 {
@@ -74,7 +74,7 @@ func (c *PathCorridor) FindCorners(cornerVerts []float32, cornerFlags []uint8,
 }
 
 // OptimizePathVisibility attempts to optimize the path if the specified point is visible.
-func (c *PathCorridor) OptimizePathVisibility(next [3]float32, pathOptimizationRange float32, navquery NavMeshQueryInterface, filter *QueryFilter) {
+func (c *PathCorridor) OptimizePathVisibility(next [3]float32, pathOptimizationRange float32, navquery *detour.NavMeshQuery, filter *QueryFilter) {
 
 	goal := next
 	dist := vecDist2D(c.pos, goal)
@@ -103,7 +103,7 @@ func (c *PathCorridor) OptimizePathVisibility(next [3]float32, pathOptimizationR
 }
 
 // OptimizePathTopology attempts to optimize the path using a local area search.
-func (c *PathCorridor) OptimizePathTopology(navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (c *PathCorridor) OptimizePathTopology(navquery *detour.NavMeshQuery, filter *QueryFilter) bool {
 	if c.npath < 3 {
 		return false
 	}
@@ -126,7 +126,7 @@ func (c *PathCorridor) OptimizePathTopology(navquery NavMeshQueryInterface, filt
 }
 
 // MoveOverOffmeshConnection advances the path over an off-mesh connection.
-func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2]PolyRef, navquery NavMeshQueryInterface) ([3]float32, [3]float32, bool) {
+func (c *PathCorridor) MoveOverOffmeshConnection(offMeshConRef PolyRef, refs *[2]PolyRef, navquery *detour.NavMeshQuery) ([3]float32, [3]float32, bool) {
 
 	// Advance the path up to and over the off-mesh connection.
 	var prevRef PolyRef
@@ -180,7 +180,7 @@ func (c *PathCorridor) FixPathStart(safeRef PolyRef, safePos [3]float32) bool {
 }
 
 // TrimInvalidPath trims invalid segments from the path.
-func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos [3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos [3]float32, navquery *detour.NavMeshQuery, filter *QueryFilter) bool {
 
 	// Keep valid path as far as possible.
 	n := 0
@@ -209,7 +209,7 @@ func (c *PathCorridor) TrimInvalidPath(safeRef PolyRef, safePos [3]float32, navq
 }
 
 // IsValid checks if the current corridor path's polygon references remain valid.
-func (c *PathCorridor) IsValid(maxLookAhead int, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (c *PathCorridor) IsValid(maxLookAhead int, navquery *detour.NavMeshQuery, filter *QueryFilter) bool {
 	n := recastMin(c.npath, maxLookAhead)
 	for i := 0; i < n; i++ {
 		if !navquery.IsValidPolyRef(c.path[i], filter) {
@@ -220,7 +220,7 @@ func (c *PathCorridor) IsValid(maxLookAhead int, navquery NavMeshQueryInterface,
 }
 
 // MovePosition moves the position from the current location to the desired location.
-func (c *PathCorridor) MovePosition(npos [3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (c *PathCorridor) MovePosition(npos [3]float32, navquery *detour.NavMeshQuery, filter *QueryFilter) bool {
 	const maxVisited = 16
 	result := make([]float32, maxVisited*3)
 	visited := make([]PolyRef, maxVisited)
@@ -240,7 +240,7 @@ func (c *PathCorridor) MovePosition(npos [3]float32, navquery NavMeshQueryInterf
 }
 
 // MoveTargetPosition moves the target from the current location to the desired location.
-func (c *PathCorridor) MoveTargetPosition(npos [3]float32, navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (c *PathCorridor) MoveTargetPosition(npos [3]float32, navquery *detour.NavMeshQuery, filter *QueryFilter) bool {
 	const maxVisited = 16
 	result := make([]float32, maxVisited*3)
 	visited := make([]PolyRef, maxVisited)

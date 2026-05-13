@@ -960,7 +960,8 @@ func readPolyDetailSlice(data []byte, count int) []PolyDetail {
 		return nil
 	}
 	result := make([]PolyDetail, count)
-	const elemSize = 10 // 4 + 4 + 1 + 1 (serialized, no padding)
+	// stride matches Align4(unsafe.Sizeof(PolyDetail{})) = 12 in the serialized data.
+	const elemSize = 12
 	for i := 0; i < count; i++ {
 		off := i * elemSize
 		pd := &result[i]

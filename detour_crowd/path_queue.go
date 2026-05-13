@@ -1,7 +1,10 @@
 package detour_crowd
 
-import "errors"
-import "github.com/actfuns/recastnavigation/detour"
+import (
+	"errors"
+
+	"github.com/actfuns/recastnavigation/detour"
+)
 
 const pathQueueMaxQueue = 8
 
@@ -14,7 +17,7 @@ type PathQueue struct {
 	nextHandle  PathQueueRef
 	maxPathSize int
 	queueHead   int
-	navquery    NavMeshQueryInterface
+	navquery    *detour.NavMeshQuery
 }
 
 type pathQuery struct {
@@ -39,7 +42,7 @@ func NewPathQueue() *PathQueue {
 }
 
 // Init initializes the path queue.
-func (q *PathQueue) Init(maxPathSize int, maxSearchNodeCount int, nav NavMeshQueryInterface) bool {
+func (q *PathQueue) Init(maxPathSize int, maxSearchNodeCount int, nav *detour.NavMeshQuery) bool {
 	q.maxPathSize = maxPathSize
 	for i := 0; i < pathQueueMaxQueue; i++ {
 		q.queue[i].ref = 0
@@ -170,6 +173,6 @@ func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, maxPath int)
 }
 
 // GetNavQuery returns the navigation mesh query used by the path queue.
-func (q *PathQueue) GetNavQuery() NavMeshQueryInterface {
+func (q *PathQueue) GetNavQuery() *detour.NavMeshQuery {
 	return q.navquery
 }

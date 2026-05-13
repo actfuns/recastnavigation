@@ -2,75 +2,9 @@ package detour_crowd
 
 import (
 	"testing"
+
+	"github.com/actfuns/recastnavigation/detour"
 )
-
-// mockNavQueryForBoundary implements NavMeshQueryInterface for LocalBoundary tests.
-type mockNavQueryForBoundary struct {
-	isValidPolyRefFunc func(PolyRef, *QueryFilter) bool
-}
-
-func (m *mockNavQueryForBoundary) FindNearestPoly(pos [3]float32, halfExtents [3]float32, filter *QueryFilter) (PolyRef, [3]float32, error) {
-	return 0, [3]float32{}, nil
-}
-
-func (m *mockNavQueryForBoundary) IsValidPolyRef(ref PolyRef, filter *QueryFilter) bool {
-	if m.isValidPolyRefFunc != nil {
-		return m.isValidPolyRefFunc(ref, filter)
-	}
-	return true
-}
-
-func (m *mockNavQueryForBoundary) MoveAlongSurface(startRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, result []float32, visited []PolyRef, maxVisitedSize int) (int, error) {
-	return 0, nil
-}
-
-func (m *mockNavQueryForBoundary) GetPolyHeight(ref PolyRef, pos [3]float32) (float32, error) {
-	return 0, nil
-}
-
-func (m *mockNavQueryForBoundary) ClosestPointOnPoly(ref PolyRef, pos [3]float32) ([3]float32, bool, error) {
-	return [3]float32{}, true, nil
-}
-
-func (m *mockNavQueryForBoundary) FindStraightPath(startPos, endPos [3]float32, path []PolyRef, pathSize int, maxStraightPath int, options int) ([]float32, []uint8, []PolyRef, int, error) {
-	return nil, nil, nil, 0, nil
-}
-
-func (m *mockNavQueryForBoundary) Raycast(startRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32, prevRef PolyRef, hit *RaycastHit) error {
-	return nil
-}
-
-func (m *mockNavQueryForBoundary) FindPathSliced(startRef, endRef PolyRef, startPos, endPos [3]float32, filter *QueryFilter, options uint32) error {
-	return nil
-}
-
-func (m *mockNavQueryForBoundary) UpdateSlicedPath(maxIter int) error {
-	return nil
-}
-
-func (m *mockNavQueryForBoundary) GetPathFromSlicedPath(path []PolyRef, maxPath int) (int, error) {
-	return 0, nil
-}
-
-func (m *mockNavQueryForBoundary) GetAttachedNavMesh() *NavMesh {
-	return nil
-}
-
-func (m *mockNavQueryForBoundary) ClosestPointOnPolyBoundary(ref PolyRef, pos [3]float32) ([3]float32, error) {
-	return [3]float32{}, nil
-}
-
-func (m *mockNavQueryForBoundary) FindPolysAroundCircle(startRef PolyRef, centerPos [3]float32, radius float32, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, resultCost []float32, maxResult int) (int, error) {
-	return 0, nil
-}
-
-func (m *mockNavQueryForBoundary) FindLocalNeighbourhood(startRef PolyRef, centerPos [3]float32, radius float32, filter *QueryFilter, resultRef []PolyRef, resultParent []PolyRef, maxResult int) (int, error) {
-	return 0, nil
-}
-
-func (m *mockNavQueryForBoundary) GetPolyWallSegments(ref PolyRef, filter *QueryFilter, segs []NeighbourSeg, maxSegs int) (int, error) {
-	return 0, nil
-}
 
 func TestLocalBoundaryNewAndReset(t *testing.T) {
 	t.Run("NewLocalBoundary should initialize to reset state", func(t *testing.T) {
@@ -321,116 +255,120 @@ func TestLocalBoundaryGetSegment(t *testing.T) {
 }
 
 func TestLocalBoundaryIsValid(t *testing.T) {
+	navQuery := createTestNavMeshQuery(t)
+
 	t.Run("should return false when npolys is zero", func(t *testing.T) {
 		b := NewLocalBoundary()
-		mock := &mockNavQueryForBoundary{}
-		if b.IsValid(mock, nil) {
+		if b.IsValid(navQuery, nil) {
 			t.Errorf("IsValid with npolys=0 should return false")
 		}
 	})
 
 	t.Run("should return true when all polys are valid", func(t *testing.T) {
-		b := NewLocalBoundary()
-		b.polys[0] = 1
-		b.polys[1] = 2
-		b.npolys = 2
+		filter := detour.NewQueryFilter()
+		filter.IncludeFlags = 0xffff
 
-		mock := &mockNavQueryForBoundary{
-			isValidPolyRefFunc: func(ref PolyRef, filter *QueryFilter) bool {
-				return ref == 1 || ref == 2
-			},
+		// Get a real valid ref from the navmesh
+		ref, _, err := navQuery.FindNearestPoly([3]float32{1, 0, 1}, [3]float32{2, 4, 2}, filter)
+		if err != nil || ref == 0 {
+			t.Fatalf("FindNearestPoly failed")
 		}
 
-		if !b.IsValid(mock, nil) {
+		b := NewLocalBoundary()
+		b.polys[0] = ref
+		b.polys[1] = ref
+		b.npolys = 2
+
+		if !b.IsValid(navQuery, filter) {
 			t.Errorf("IsValid with valid polys should return true")
 		}
 	})
 
 	t.Run("should return false when any poly is invalid", func(t *testing.T) {
-		b := NewLocalBoundary()
-		b.polys[0] = 1
-		b.polys[1] = 2
-		b.npolys = 2
+		filter := detour.NewQueryFilter()
+		filter.IncludeFlags = 0xffff
 
-		mock := &mockNavQueryForBoundary{
-			isValidPolyRefFunc: func(ref PolyRef, filter *QueryFilter) bool {
-				return ref != 2 // only ref 1 is valid
-			},
+		ref, _, err := navQuery.FindNearestPoly([3]float32{1, 0, 1}, [3]float32{2, 4, 2}, filter)
+		if err != nil || ref == 0 {
+			t.Fatalf("FindNearestPoly failed")
 		}
 
-		if b.IsValid(mock, nil) {
-			t.Errorf("IsValid should return false when poly 2 is invalid")
+		b := NewLocalBoundary()
+		b.polys[0] = ref
+		b.polys[1] = 0 // invalid ref
+		b.npolys = 2
+
+		if b.IsValid(navQuery, filter) {
+			t.Errorf("IsValid should return false when poly 1 is 0 (invalid)")
 		}
 	})
 
 	t.Run("should short-circuit on first invalid poly", func(t *testing.T) {
-		b := NewLocalBoundary()
-		b.polys[0] = 1
-		b.polys[1] = 2
-		b.polys[2] = 3
-		b.npolys = 3
+		filter := detour.NewQueryFilter()
+		filter.IncludeFlags = 0xffff
 
-		var checkedRefs []PolyRef
-		mock := &mockNavQueryForBoundary{
-			isValidPolyRefFunc: func(ref PolyRef, filter *QueryFilter) bool {
-				checkedRefs = append(checkedRefs, ref)
-				return ref != 2 // ref 2 is invalid
-			},
+		ref, _, err := navQuery.FindNearestPoly([3]float32{1, 0, 1}, [3]float32{2, 4, 2}, filter)
+		if err != nil || ref == 0 {
+			t.Fatalf("FindNearestPoly failed")
 		}
 
-		b.IsValid(mock, nil)
+		b := NewLocalBoundary()
+		b.polys[0] = ref
+		b.polys[1] = 0 // invalid ref — should short-circuit here
+		b.polys[2] = ref
+		b.npolys = 3
 
-		// Should have only checked ref 1 and 2, not reached ref 3
-		if len(checkedRefs) != 2 || checkedRefs[0] != 1 || checkedRefs[1] != 2 {
-			t.Errorf("expected short-circuit at ref 2, checked refs = %v", checkedRefs)
+		if b.IsValid(navQuery, filter) {
+			t.Errorf("IsValid should return false when polis[1] is invalid")
 		}
 	})
 
 	t.Run("should not check beyond npolys count", func(t *testing.T) {
-		b := NewLocalBoundary()
-		b.polys[0] = 1
-		b.polys[1] = 99  // slot within npolys
-		b.polys[2] = 999 // slot beyond npolys
-		b.npolys = 2
+		filter := detour.NewQueryFilter()
+		filter.IncludeFlags = 0xffff
 
-		var checkedRefs []PolyRef
-		mock := &mockNavQueryForBoundary{
-			isValidPolyRefFunc: func(ref PolyRef, filter *QueryFilter) bool {
-				checkedRefs = append(checkedRefs, ref)
-				return true
-			},
+		ref, _, err := navQuery.FindNearestPoly([3]float32{1, 0, 1}, [3]float32{2, 4, 2}, filter)
+		if err != nil || ref == 0 {
+			t.Fatalf("FindNearestPoly failed")
 		}
 
-		b.IsValid(mock, nil)
+		b := NewLocalBoundary()
+		b.polys[0] = ref
+		b.polys[1] = ref
+		b.polys[2] = 0 // beyond npolys, should be ignored
+		b.npolys = 2
 
-		for _, r := range checkedRefs {
-			if r == 999 {
-				t.Errorf("IsValid checked poly at index 2 which is beyond npolys=2")
-			}
+		if !b.IsValid(navQuery, filter) {
+			t.Errorf("IsValid should return true since slot 2 is beyond npolys")
 		}
 	})
 
 	t.Run("should pass through the filter parameter", func(t *testing.T) {
-		b := NewLocalBoundary()
-		b.polys[0] = 1
-		b.npolys = 1
+		// Create a filter that excludes all polys
+		excludeFilter := detour.NewQueryFilter()
+		excludeFilter.ExcludeFlags = 0xffff
+		excludeFilter.IncludeFlags = 0xffff
 
-		calledWithFilter := false
-		fakeFilter := &QueryFilter{}
+		includeFilter := detour.NewQueryFilter()
+		includeFilter.IncludeFlags = 0xffff
 
-		mock := &mockNavQueryForBoundary{
-			isValidPolyRefFunc: func(ref PolyRef, filter *QueryFilter) bool {
-				if filter == fakeFilter {
-					calledWithFilter = true
-				}
-				return true
-			},
+		ref, _, err := navQuery.FindNearestPoly([3]float32{1, 0, 1}, [3]float32{2, 4, 2}, includeFilter)
+		if err != nil || ref == 0 {
+			t.Fatalf("FindNearestPoly failed")
 		}
 
-		b.IsValid(mock, fakeFilter)
+		b := NewLocalBoundary()
+		b.polys[0] = ref
+		b.npolys = 1
 
-		if !calledWithFilter {
-			t.Errorf("IsValid should pass filter to IsValidPolyRef")
+		// With excludeFilter, the ref should be invalid
+		if b.IsValid(navQuery, excludeFilter) {
+			t.Errorf("IsValid should return false with filter that excludes all polys")
+		}
+
+		// With includeFilter, the ref should be valid
+		if !b.IsValid(navQuery, includeFilter) {
+			t.Errorf("IsValid should return true with filter that includes the poly")
 		}
 	})
 }

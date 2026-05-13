@@ -1,5 +1,7 @@
 package detour_crowd
 
+import "github.com/actfuns/recastnavigation/detour"
+
 // LocalBoundary stores local boundary data for an agent.
 type LocalBoundary struct {
 	center [3]float32
@@ -74,7 +76,7 @@ func (b *LocalBoundary) addSegment(dist float32, s *[6]float32) {
 
 // Update updates the local boundary using the current position and navigation mesh query.
 func (b *LocalBoundary) Update(ref PolyRef, pos [3]float32, collisionQueryRange float32,
-	navquery NavMeshQueryInterface, filter *QueryFilter) {
+	navquery *detour.NavMeshQuery, filter *QueryFilter) {
 
 	if ref == 0 {
 		b.center = [3]float32{mathMaxFloat32, mathMaxFloat32, mathMaxFloat32}
@@ -111,7 +113,7 @@ func (b *LocalBoundary) Update(ref PolyRef, pos [3]float32, collisionQueryRange 
 }
 
 // IsValid checks whether the local boundary is still valid.
-func (b *LocalBoundary) IsValid(navquery NavMeshQueryInterface, filter *QueryFilter) bool {
+func (b *LocalBoundary) IsValid(navquery *detour.NavMeshQuery, filter *QueryFilter) bool {
 	if b.npolys == 0 {
 		return false
 	}

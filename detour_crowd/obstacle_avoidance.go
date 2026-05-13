@@ -271,8 +271,12 @@ func (q *ObstacleAvoidanceQuery) ProcessSample(vcand [3]float32, cs float32,
 	minPenalty float32, debug *ObstacleAvoidanceDebugData) float32 {
 
 	// Penalty for straying away from the desired and current velocities
-	vpen := q.params.WeightDesVel * (vecDist2D(vcand, dvel) * q.invVmax)
-	vcpen := q.params.WeightCurVel * (vecDist2D(vcand, vel) * q.invVmax)
+	dx0 := vcand[0] - dvel[0]
+	dz0 := vcand[2] - dvel[2]
+	vpen := q.params.WeightDesVel * (float32(math.Sqrt(float64(dx0*dx0+dz0*dz0))) * q.invVmax)
+	dx1 := vcand[0] - vel[0]
+	dz1 := vcand[2] - vel[2]
+	vcpen := q.params.WeightCurVel * (float32(math.Sqrt(float64(dx1*dx1+dz1*dz1))) * q.invVmax)
 
 	// Find the threshold hit time to bail out based on the early out penalty
 	minPen := minPenalty - vpen - vcpen
@@ -289,32 +293,55 @@ func (q *ObstacleAvoidanceQuery) ProcessSample(vcand [3]float32, cs float32,
 	for i := 0; i < q.ncircles; i++ {
 		cir := &q.circles[i]
 
-		// RVO
-		vab := vecScale(vcand, 2)
-		vab = vecSub(vab, vel)
-		vab = vecSub(vab, cir.Vel)
+		// RVO — fully inlined to avoid [3]float32 temp allocations
+		vabX := vcand[0]*2 - vel[0] - cir.Vel[0]
+		_ = vcand[1]*2 - vel[1] - cir.Vel[1]
+		vabZ := vcand[2]*2 - vel[2] - cir.Vel[2]
 
-		// Side
-		side += clampF32(
-			float32(math.Min(float64(vecDot2D(cir.Dp, vab)*0.5+0.5), float64(vecDot2D(cir.Np, vab)*2))),
-			0, 1)
+		// Side — inline vecDot2D, replace math.Min + float64 conversions with branch
+		d0 := cir.Dp[0]*vabX + cir.Dp[2]*vabZ
+		d1 := cir.Np[0]*vabX + cir.Np[2]*vabZ
+		s := d0*0.5 + 0.5
+		if d1*2 < s {
+			s = d1 * 2
+		}
+		if s < 0 {
+			s = 0
+		} else if s > 1 {
+			s = 1
+		}
+		side += s
 		nside++
 
-		ok, htmin, htmax := sweepCircleCircle(pos, rad, vab, cir.P, cir.Rad)
-		if !ok {
-			continue
-		}
+		// Inline sweepCircleCircle
+		{
+			const eps = 0.0001
+			sx := cir.P[0] - pos[0]
+			_ = cir.P[1] - pos[1]
+			sz := cir.P[2] - pos[2]
+			rr := rad + cir.Rad
+			cc := sx*sx + sz*sz - rr*rr
+			aa := vabX*vabX + vabZ*vabZ
+			if aa >= eps {
+				bb := vabX*sx + vabZ*sz
+				dd := bb*bb - aa*cc
+				if dd >= 0 {
+					aaInv := 1.0 / aa
+					rd := float32(math.Sqrt(float64(dd)))
+					htmin := (bb - rd) * aaInv
+					htmax := (bb + rd) * aaInv
 
-		// Handle overlapping obstacles.
-		if htmin < 0 && htmax > 0 {
-			htmin = -htmin * 0.5
-		}
-
-		if htmin >= 0 {
-			if htmin < tmin {
-				tmin = htmin
-				if tmin < tThresold {
-					return minPenalty
+					if htmin < 0 && htmax > 0 {
+						htmin = -htmin * 0.5
+					}
+					if htmin >= 0 {
+						if htmin < tmin {
+							tmin = htmin
+							if tmin < tThresold {
+								return minPenalty
+							}
+						}
+					}
 				}
 			}
 		}
@@ -337,11 +364,20 @@ func (q *ObstacleAvoidanceQuery) ProcessSample(vcand [3]float32, cs float32,
 			// Else immediate collision.
 			htmin = 0
 		} else {
-			ok, htminVal := isectRaySeg(pos, vcand, seg.P, seg.Q)
-			if !ok {
+			// Inline isectRaySeg — fully inlined to avoid [3]float32 temps
+			vx := seg.Q[0] - seg.P[0]
+			vz := seg.Q[2] - seg.P[2]
+			wx := pos[0] - seg.P[0]
+			wz := pos[2] - seg.P[2]
+			d := vcand[0]*vz - vcand[2]*vx
+			if float32(math.Abs(float64(d))) < 1e-6 {
 				continue
 			}
-			htmin = htminVal
+			nx := vcand[0]*wz - vcand[2]*wx
+			htmin = -nx / d
+			if htmin < 0 {
+				continue
+			}
 		}
 
 		// Avoid less when facing walls.

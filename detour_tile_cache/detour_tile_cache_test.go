@@ -1410,8 +1410,7 @@ func createTestLayer20x20() (header *TileCacheLayerHeader, heights, areas, cons 
 
 // setupTileCacheForPathing creates TileCache, adds a layer, builds navmesh tile,
 // and returns query + navmesh for pathfinding tests.
-func setupTileCacheForPathing(t *testing.T, header *TileCacheLayerHeader, heights, areas, cons []uint8,
-	maxSimplificationError float32) (*TileCache, *detour.NavMesh, *detour.NavMeshQuery) {
+func setupTileCacheForPathing(t *testing.T, header *TileCacheLayerHeader, heights, areas, cons []uint8) (*TileCache, *detour.NavMesh, *detour.NavMeshQuery) {
 	t.Helper()
 
 	comp := &testCompressor{}
@@ -1482,7 +1481,7 @@ func makeFilter() *detour.QueryFilter {
 
 func TestTileCacheFindPath(t *testing.T) {
 	header, heights, areas, cons := createTestLayer20x20()
-	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons)
 
 	filter := makeFilter()
 	halfExtents := [3]float32{0.5, 2, 0.5}
@@ -1513,7 +1512,7 @@ func TestTileCacheFindPath(t *testing.T) {
 
 func TestTileCacheRaycast(t *testing.T) {
 	header, heights, areas, cons := createTestLayer20x20()
-	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons)
 
 	filter := makeFilter()
 	halfExtents := [3]float32{0.5, 2, 0.5}
@@ -1538,7 +1537,7 @@ func TestTileCacheRaycast(t *testing.T) {
 
 func TestTileCacheFindStraightPath(t *testing.T) {
 	header, heights, areas, cons := createTestLayer20x20()
-	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons)
 
 	filter := makeFilter()
 	halfExtents := [3]float32{0.5, 2, 0.5}
@@ -1577,7 +1576,7 @@ func TestTileCacheFindStraightPath(t *testing.T) {
 
 func TestTileCacheFindPolysAroundCircle(t *testing.T) {
 	header, heights, areas, cons := createTestLayer20x20()
-	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+	_, _, q := setupTileCacheForPathing(t, header, heights, areas, cons)
 
 	filter := makeFilter()
 	halfExtents := [3]float32{0.5, 2, 0.5}
@@ -1605,7 +1604,7 @@ func TestTileCacheFindPolysAroundCircle(t *testing.T) {
 
 func TestTileCacheObstacleBlocksPath(t *testing.T) {
 	header, heights, areas, cons := createTestLayer20x20()
-	tc, m, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
+	tc, m, q := setupTileCacheForPathing(t, header, heights, areas, cons)
 
 	// Capture original tile data (verts + polys) for later comparison.
 	saveTileData := func() (verts []float32, polys []detour.Poly) {
@@ -1747,8 +1746,7 @@ func TestTileCacheObstacleBlocksPath(t *testing.T) {
 }
 
 // setupBenchTileCache sets up a TileCache + NavMesh for benchmarks (uses testing.TB).
-func setupBenchTileCache(b testing.TB, header *TileCacheLayerHeader, heights, areas, cons []uint8,
-	maxSimplificationError float32) (*TileCache, *detour.NavMesh, *detour.NavMeshQuery) {
+func setupBenchTileCache(b testing.TB, header *TileCacheLayerHeader, heights, areas, cons []uint8) (*TileCache, *detour.NavMesh, *detour.NavMeshQuery) {
 	b.Helper()
 
 	comp := &testCompressor{}
@@ -1810,7 +1808,7 @@ func BenchmarkTileCacheUpdate(b *testing.B) {
 
 	// Benchmark: add obstacle + update loop.
 	b.Run("AddObstacle", func(b *testing.B) {
-		tc, nav, _ := setupBenchTileCache(b, header, heights, areas, cons, 1.3)
+		tc, nav, _ := setupBenchTileCache(b, header, heights, areas, cons)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -1845,7 +1843,7 @@ func BenchmarkTileCacheUpdate(b *testing.B) {
 
 	// Benchmark: remove obstacle + update loop.
 	b.Run("RemoveObstacle", func(b *testing.B) {
-		tc, nav, _ := setupBenchTileCache(b, header, heights, areas, cons, 1.3)
+		tc, nav, _ := setupBenchTileCache(b, header, heights, areas, cons)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {

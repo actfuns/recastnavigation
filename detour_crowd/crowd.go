@@ -35,7 +35,7 @@ type Crowd struct {
 	filters             [CrowdMaxQueryFilterType]interface{}
 	velocitySampleCount int
 
-	navquery NavMeshQueryInterface
+	navquery *detour.NavMeshQuery
 }
 
 // NewCrowd creates a new crowd object.
@@ -44,7 +44,7 @@ func NewCrowd() *Crowd {
 }
 
 // Init initializes the crowd manager.
-func (c *Crowd) Init(maxAgents int, maxAgentRadius float32, nav NavMeshQueryInterface) bool {
+func (c *Crowd) Init(maxAgents int, maxAgentRadius float32, nav *detour.NavMeshQuery) bool {
 	c.maxAgents = maxAgents
 	c.maxAgentRadius = maxAgentRadius
 
@@ -722,7 +722,7 @@ func (c *Crowd) GetPathQueue() *PathQueue {
 }
 
 // GetNavMeshQuery returns the navigation mesh query.
-func (c *Crowd) GetNavMeshQuery() NavMeshQueryInterface {
+func (c *Crowd) GetNavMeshQuery() *detour.NavMeshQuery {
 	return c.navquery
 }
 
@@ -750,8 +750,6 @@ func (c *Crowd) getFilter(queryFilterType uint8) *QueryFilter {
 		if f, ok := c.filters[queryFilterType].(*QueryFilter); ok {
 			return f
 		}
-		// Also try *detour.QueryFilter that was set via SetFilter
-		return c.filters[queryFilterType].(*QueryFilter)
 	}
 	return nil
 }
