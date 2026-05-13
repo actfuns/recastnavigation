@@ -1212,84 +1212,6 @@ func TestAllocFreeHelpers(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// NavMeshCreateParams bridge and NavMeshInterface consistency
-// ---------------------------------------------------------------------------
-
-// bridgeParams converts detour_tile_cache.NavMeshCreateParams to detour.NavMeshCreateParams.
-func bridgeParams(params *NavMeshCreateParams) *detour.NavMeshCreateParams {
-	return &detour.NavMeshCreateParams{
-		Verts:          params.Verts,
-		VertCount:      params.VertCount,
-		Polys:          params.Polys,
-		PolyAreas:      params.PolyAreas,
-		PolyFlags:      params.PolyFlags,
-		PolyCount:      params.PolyCount,
-		Nvp:            params.Nvp,
-		WalkableHeight: params.WalkableHeight,
-		WalkableRadius: params.WalkableRadius,
-		WalkableClimb:  params.WalkableClimb,
-		TileX:          int(params.TileX),
-		TileY:          int(params.TileY),
-		TileLayer:      int(params.TileLayer),
-		Cs:             params.Cs,
-		Ch:             params.Ch,
-		Bmin:           params.Bmin,
-		Bmax:           params.Bmax,
-		BuildBvTree:    params.BuildBvTree,
-	}
-}
-
-func TestCreateNavMeshDataBridge(t *testing.T) {
-	t.Run("set CreateNavMeshData to use detour package", func(t *testing.T) {
-		// Save original and restore
-		orig := CreateNavMeshData
-		defer func() { CreateNavMeshData = orig }()
-
-		CreateNavMeshData = func(params *NavMeshCreateParams) ([]uint8, int) {
-			dp := bridgeParams(params)
-			data, dataSize, ok := detour.CreateNavMeshData(dp)
-			if !ok {
-				return nil, 0
-			}
-			return data, dataSize
-		}
-
-		// Test with minimal polygon mesh params
-		// Create a simple quad: 4 vertices, 1 polygon
-		params := &NavMeshCreateParams{
-			Verts: []uint16{
-				0, 0, 0, // vertex 0
-				10, 0, 0, // vertex 1
-				10, 0, 10, // vertex 2
-				0, 0, 10, // vertex 3
-			},
-			VertCount:      4,
-			Polys:          []uint16{0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0},
-			PolyAreas:      []uint8{63},
-			PolyFlags:      []uint16{0xffff},
-			PolyCount:      1,
-			Nvp:            6,
-			WalkableHeight: 2.0,
-			WalkableRadius: 0.6,
-			WalkableClimb:  1.0,
-			Cs:             1.0,
-			Ch:             0.2,
-			TileX:          0,
-			TileY:          0,
-			TileLayer:      0,
-			Bmin:           [3]float32{0, 0, 0},
-			Bmax:           [3]float32{10, 1, 10},
-		}
-
-		data, dataSize := CreateNavMeshData(params)
-		if data == nil || dataSize == 0 {
-			t.Fatal("CreateNavMeshData returned nil/zero — may need detail mesh data too")
-		}
-		t.Logf("navmesh data size: %d", dataSize)
-	})
-}
-
 func TestTileCacheFullPipeline(t *testing.T) {
 	comp := &testCompressor{}
 	alloc := &testAlloc{}
@@ -1299,8 +1221,7 @@ func TestTileCacheFullPipeline(t *testing.T) {
 	orig := CreateNavMeshData
 	defer func() { CreateNavMeshData = orig }()
 	CreateNavMeshData = func(params *NavMeshCreateParams) ([]uint8, int) {
-		dp := bridgeParams(params)
-		data, dataSize, ok := detour.CreateNavMeshData(dp)
+		data, dataSize, ok := detour.CreateNavMeshData(params)
 		if !ok {
 			return nil, 0
 		}
@@ -1308,7 +1229,12 @@ func TestTileCacheFullPipeline(t *testing.T) {
 	}
 
 	tc := NewTileCache()
-	err := tc.Init(defaultParams(), alloc, comp, &testMeshProcess{})
+	params := defaultParams()
+	params.Width = int32(header.Width)
+	params.Height = int32(header.Height)
+	params.MaxSimplificationError = 1.3
+
+	err := tc.Init(params, alloc, comp, &testMeshProcess{})
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -1491,22 +1417,11 @@ func setupTileCacheForPathing(t *testing.T, header *TileCacheLayerHeader, height
 	comp := &testCompressor{}
 	alloc := &testAlloc{}
 
-	orig := CreateNavMeshData
-	t.Cleanup(func() { CreateNavMeshData = orig })
-	CreateNavMeshData = func(params *NavMeshCreateParams) ([]uint8, int) {
-		dp := bridgeParams(params)
-		data, dataSize, ok := detour.CreateNavMeshData(dp)
-		if !ok {
-			return nil, 0
-		}
-		return data, dataSize
-	}
-
 	tc := NewTileCache()
 	params := defaultParams()
 	params.Width = int32(header.Width)
 	params.Height = int32(header.Height)
-	params.MaxSimplificationError = maxSimplificationError
+	params.MaxSimplificationError = 1.3
 
 	err := tc.Init(params, alloc, comp, &testMeshProcess{})
 	if err != nil {
@@ -1692,9 +1607,28 @@ func TestTileCacheObstacleBlocksPath(t *testing.T) {
 	header, heights, areas, cons := createTestLayer20x20()
 	tc, m, q := setupTileCacheForPathing(t, header, heights, areas, cons, 1.3)
 
+	// Capture original tile data (verts + polys) for later comparison.
+	saveTileData := func() (verts []float32, polys []detour.Poly) {
+		for i := range m.Tiles {
+			ti := &m.Tiles[i]
+			if ti.Header != nil {
+				verts = make([]float32, len(ti.Verts))
+				copy(verts, ti.Verts)
+				polys = make([]detour.Poly, len(ti.Polys))
+				copy(polys, ti.Polys)
+				return
+			}
+		}
+		t.Fatal("no tile found")
+		return
+	}
+
+	origVerts, origPolys := saveTileData()
+	t.Logf("Original tile: %d verts, %d polys", len(origVerts)/3, len(origPolys))
+
+	// Verify path finding works.
 	filter := makeFilter()
 	halfExtents := [3]float32{0.5, 2, 0.5}
-
 	startPos := [3]float32{0.6, 2, 0.6}
 	endPos := [3]float32{5.0, 2, 5.0}
 
@@ -1741,10 +1675,206 @@ func TestTileCacheObstacleBlocksPath(t *testing.T) {
 		t.Fatalf("FindPath after obstacle: n=%d err=%v", nAfter, err)
 	}
 	t.Logf("Path after obstacle: %d polys", nAfter)
+	t.Logf("Path changed: before=%d after=%d", nBefore, nAfter)
+
+	// Remove obstacle and verify mesh returns to original state.
+	if err := tc.RemoveObstacle(obRef); err != nil {
+		t.Fatalf("RemoveObstacle: %v", err)
+	}
+	for {
+		done, err := tc.Update(1.0, m)
+		if err != nil {
+			t.Fatalf("Update after remove: %v", err)
+		}
+		if done {
+			break
+		}
+	}
+
+	// Read tile data after obstacle removal.
+	restoredVerts, restoredPolys := saveTileData()
+	t.Logf("Restored tile: %d verts, %d polys", len(restoredVerts)/3, len(restoredPolys))
+
+	// --- Assertions ---
+
+	// 1. Vertex count must match.
+	if len(restoredVerts) != len(origVerts) {
+		t.Errorf("vertex count mismatch: original=%d restored=%d", len(origVerts), len(restoredVerts))
+	} else {
+		// 2. Every vertex must match exactly.
+		for i := range restoredVerts {
+			if restoredVerts[i] != origVerts[i] {
+				t.Errorf("vert[%d]: original=%f restored=%f", i, origVerts[i], restoredVerts[i])
+				break
+			}
+		}
+		t.Logf("Vertex data: %d values match exactly", len(origVerts))
+	}
+
+	// 3. Poly count must match.
+	if len(restoredPolys) != len(origPolys) {
+		t.Errorf("poly count mismatch: original=%d restored=%d", len(origPolys), len(restoredPolys))
+	} else {
+		// 4. Every poly field must match exactly.
+		for i := range restoredPolys {
+			rp, op := &restoredPolys[i], &origPolys[i]
+			if rp.FirstLink != op.FirstLink || rp.VertCount != op.VertCount ||
+				rp.Flags != op.Flags || rp.Verts != op.Verts ||
+				rp.Neis != op.Neis {
+				t.Errorf("poly[%d] mismatch:\n  original: FirstLink=%d VertCount=%d Flags=%d Verts=%v Neis=%v\n  restored: FirstLink=%d VertCount=%d Flags=%d Verts=%v Neis=%v",
+					i, op.FirstLink, op.VertCount, op.Flags, op.Verts, op.Neis,
+					rp.FirstLink, rp.VertCount, rp.Flags, rp.Verts, rp.Neis)
+				break
+			}
+		}
+		t.Logf("Poly data: %d polys match exactly", len(origPolys))
+	}
+
+	// 5. Path should still work after restore.
+	startRef3, _, _ := q.FindNearestPoly(startPos, halfExtents, filter)
+	endRef3, _, _ := q.FindNearestPoly(endPos, halfExtents, filter)
+
+	pathRestored := make([]detour.PolyRef, 4096)
+	nRestored, err := q.FindPath(startRef3, endRef3, startPos, endPos, filter, pathRestored)
+	if err != nil || nRestored == 0 {
+		t.Fatalf("FindPath after restore: n=%d err=%v", nRestored, err)
+	}
+	t.Logf("Path after restoring obstacle: %d polys", nRestored)
 
 	fmt.Printf("Go path before obstacle polys=%d\n", nBefore)
 	fmt.Printf("Go path after  obstacle polys=%d\n", nAfter)
+	fmt.Printf("Go path after  restore  polys=%d\n", nRestored)
+}
 
-	_ = pathBefore
-	_ = pathAfter
+// setupBenchTileCache sets up a TileCache + NavMesh for benchmarks (uses testing.TB).
+func setupBenchTileCache(b testing.TB, header *TileCacheLayerHeader, heights, areas, cons []uint8,
+	maxSimplificationError float32) (*TileCache, *detour.NavMesh, *detour.NavMeshQuery) {
+	b.Helper()
+
+	comp := &testCompressor{}
+	alloc := &testAlloc{}
+
+	tc := NewTileCache()
+	params := defaultParams()
+	params.Width = int32(header.Width)
+	params.Height = int32(header.Height)
+	params.MaxSimplificationError = 1.3
+
+	err := tc.Init(params, alloc, comp, &testMeshProcess{})
+	if err != nil {
+		b.Fatalf("TileCache.Init: %v", err)
+	}
+
+	data, dataSize, cerr := BuildTileCacheLayer(comp, header, heights, areas, cons)
+	if cerr != nil {
+		b.Fatalf("BuildTileCacheLayer: %v", cerr)
+	}
+	_, err = tc.AddTile(data, dataSize, 0)
+	if err != nil {
+		b.Fatalf("AddTile: %v", err)
+	}
+
+	tileWidth := header.Bmax[0] - header.Bmin[0]
+	tileHeight := header.Bmax[2] - header.Bmin[2]
+
+	m := &detour.NavMesh{}
+	err = m.Init(&detour.NavMeshParams{
+		Orig:       header.Bmin,
+		TileWidth:  tileWidth,
+		TileHeight: tileHeight,
+		MaxTiles:   1,
+		MaxPolys:   4096,
+	})
+	if err != nil {
+		b.Fatalf("NavMesh.Init: %v", err)
+	}
+
+	tileRef := tc.GetTileRef(&tc.tiles[0])
+	err = tc.BuildNavMeshTile(tileRef, m)
+	if err != nil {
+		b.Fatalf("BuildNavMeshTile: %v", err)
+	}
+
+	q := detour.NewNavMeshQuery()
+	if err := q.Init(m, 65535); err != nil {
+		b.Fatalf("query.Init: %v", err)
+	}
+
+	return tc, m, q
+}
+
+// BenchmarkTileCacheUpdate measures the cost of adding an obstacle, rebuilding
+// the affected tile, removing the obstacle, and rebuilding again.
+func BenchmarkTileCacheUpdate(b *testing.B) {
+	header, heights, areas, cons := createTestLayer20x20()
+
+	// Benchmark: add obstacle + update loop.
+	b.Run("AddObstacle", func(b *testing.B) {
+		tc, nav, _ := setupBenchTileCache(b, header, heights, areas, cons, 1.3)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			obRef, err := tc.AddObstacle([3]float32{3.0, 0, 3.0}, 1.5, 4.0)
+			if err != nil {
+				b.Fatalf("AddObstacle: %v", err)
+			}
+			for {
+				done, err := tc.Update(1.0, nav)
+				if err != nil {
+					b.Fatalf("Update: %v", err)
+				}
+				if done {
+					break
+				}
+			}
+
+			if err := tc.RemoveObstacle(obRef); err != nil {
+				b.Fatalf("RemoveObstacle: %v", err)
+			}
+			for {
+				done, err := tc.Update(1.0, nav)
+				if err != nil {
+					b.Fatalf("Update: %v", err)
+				}
+				if done {
+					break
+				}
+			}
+		}
+	})
+
+	// Benchmark: remove obstacle + update loop.
+	b.Run("RemoveObstacle", func(b *testing.B) {
+		tc, nav, _ := setupBenchTileCache(b, header, heights, areas, cons, 1.3)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			obRef, err := tc.AddObstacle([3]float32{3.0, 0, 3.0}, 1.5, 4.0)
+			if err != nil {
+				b.Fatalf("AddObstacle: %v", err)
+			}
+			for {
+				done, err := tc.Update(1.0, nav)
+				if err != nil {
+					b.Fatalf("Update: %v", err)
+				}
+				if done {
+					break
+				}
+			}
+
+			if err := tc.RemoveObstacle(obRef); err != nil {
+				b.Fatalf("RemoveObstacle: %v", err)
+			}
+			for {
+				done, err := tc.Update(1.0, nav)
+				if err != nil {
+					b.Fatalf("Update: %v", err)
+				}
+				if done {
+					break
+				}
+			}
+		}
+	})
 }

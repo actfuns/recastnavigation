@@ -916,14 +916,16 @@ func swapEndian16(v *uint16) {
 // ---------------------------------------------------------------------------
 
 // CreateNavMeshData creates navigation mesh data from parameters.
-// This is a function variable that can be replaced with a real implementation
-// that calls into the detour package's CreateNavMeshData.
+// This is a function variable so it can be replaced for testing.
 var CreateNavMeshData func(params *NavMeshCreateParams) ([]uint8, int)
 
 func init() {
-	// Default stub - returns nil which means "empty tile"
 	CreateNavMeshData = func(params *NavMeshCreateParams) ([]uint8, int) {
-		return nil, 0
+		data, size, ok := detour.CreateNavMeshData(params)
+		if !ok {
+			return nil, 0
+		}
+		return data, size
 	}
 }
 

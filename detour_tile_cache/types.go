@@ -2,6 +2,10 @@
 // It allows adding and removing obstacles at runtime by rebuilding affected tiles.
 package detour_tile_cache
 
+import (
+	"github.com/actfuns/recastnavigation/detour"
+)
+
 // Constants
 const (
 	TileCacheMagic   = 'D'<<24 | 'T'<<16 | 'L'<<8 | 'R'
@@ -216,26 +220,7 @@ type TileCacheMeshProcess interface {
 }
 
 // NavMeshCreateParams holds parameters for creating navigation mesh data.
-type NavMeshCreateParams struct {
-	Verts          []uint16
-	VertCount      int
-	Polys          []uint16
-	PolyAreas      []uint8
-	PolyFlags      []uint16
-	PolyCount      int
-	Nvp            int
-	WalkableHeight float32
-	WalkableRadius float32
-	WalkableClimb  float32
-	TileX          int32
-	TileY          int32
-	TileLayer      int32
-	Cs             float32
-	Ch             float32
-	BuildBvTree    bool
-	Bmin           [3]float32
-	Bmax           [3]float32
-}
+type NavMeshCreateParams = detour.NavMeshCreateParams
 
 // Align4 aligns an integer to 4 bytes.
 func Align4(x int) int {

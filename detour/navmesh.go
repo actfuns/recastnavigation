@@ -801,34 +801,38 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 	detailVertsSize := Align4(int(unsafeSizeOfFloat32()) * 3 * int(header.DetailVertCount))
 	detailTrisSize := Align4(int(unsafeSizeOfUint8()) * 4 * int(header.DetailTriCount))
 	bvtreeSize := Align4(int(unsafeSizeOfBVNode()) * int(header.BVNodeCount))
-	offMeshLinksSize := Align4(int(unsafeSizeOfOffMeshConnection()) * int(header.OffMeshConCount))
-	_ = offMeshLinksSize
 
 	d := data[headerSize:]
 
 	tile.Header = &header
 
-	// Read verts
-
-	tile.Verts = readFloat32Slice(d, vertsSize)
+	// Zero-copy reads: tile fields reference data byte slice directly.
+	tile.Verts = unsafe.Slice((*float32)(unsafe.Pointer(&d[0])), vertsSize/int(unsafe.Sizeof(float32(0))))
 	d = d[vertsSize:]
-	tile.Polys = readPolySlice(d, int(header.PolyCount))
+	tile.Polys = unsafe.Slice((*Poly)(unsafe.Pointer(&d[0])), polysSize/int(unsafe.Sizeof(Poly{})))
 	d = d[polysSize:]
-	tile.Links = readLinkSlice(d, int(header.MaxLinkCount))
+	tile.Links = unsafe.Slice((*Link)(unsafe.Pointer(&d[0])), linksSize/int(unsafe.Sizeof(Link{})))
 	d = d[linksSize:]
+
+	// PolyDetail has struct padding (12B) vs serialized (10B) — must copy.
 	tile.DetailMeshes = readPolyDetailSlice(d, int(header.DetailMeshCount))
 	d = d[detailMeshesSize:]
-	tile.DetailVerts = readFloat32Slice(d, detailVertsSize)
-	d = d[detailVertsSize:]
-	tile.DetailTris = readUint8Slice(d, detailTrisSize)
-	d = d[detailTrisSize:]
-	tile.BVTree = readBVNodeSlice(d, int(header.BVNodeCount))
-	d = d[bvtreeSize:]
-	tile.OffMeshCons = readOffMeshConnectionSlice(d, int(header.OffMeshConCount))
 
-	if bvtreeSize == 0 {
-		tile.BVTree = nil
+	if detailVertsSize > 0 {
+		tile.DetailVerts = unsafe.Slice((*float32)(unsafe.Pointer(&d[0])), detailVertsSize/int(unsafe.Sizeof(float32(0))))
+		d = d[detailVertsSize:]
 	}
+	if detailTrisSize > 0 {
+		tile.DetailTris = d[:detailTrisSize]
+		d = d[detailTrisSize:]
+	}
+	if bvtreeSize > 0 {
+		tile.BVTree = unsafe.Slice((*BVNode)(unsafe.Pointer(&d[0])), bvtreeSize/int(unsafe.Sizeof(BVNode{})))
+		d = d[bvtreeSize:]
+	}
+
+	tile.Data = data
+	tile.Flags = flags
 
 	// Build links freelist
 	tile.LinksFreeList = 0
@@ -838,9 +842,6 @@ func (m *NavMesh) AddTile(data []byte, flags int, lastRef TileRef) (TileRef, err
 			tile.Links[i].Next = uint32(i + 1)
 		}
 	}
-
-	tile.Data = data
-	tile.Flags = flags
 
 	m.connectIntLinks(tile)
 	m.baseOffMeshLinks(tile)

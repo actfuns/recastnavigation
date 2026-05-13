@@ -684,7 +684,7 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh *detour.Nav
 	// Remove existing tile.
 	navmesh.RemoveTile(navmesh.GetTileRefAt(tile.Header.Tx, tile.Header.Ty, tile.Header.Tlayer))
 
-	// Add new tile, or leave the location empty.
+	// Add new tile, or leave the location empty (zero-copy).
 	_, err = navmesh.AddTile(navData, 0x01, 0)
 	if err != nil {
 		return err

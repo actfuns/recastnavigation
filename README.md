@@ -375,6 +375,7 @@ go test ./...
 - 使用 Go 的垃圾回收代替 C++ 的手动内存池管理
 - 去除了 C++ 的虚函数回调机制，改用 Go 接口
 - 使用 Go 泛型实现 `Min`/`Max`/`Abs`/`Swap` 等工具函数
+- `NavMeshCreateParams.TileX`/`TileY`/`TileLayer` 字段类型为 `int32`（非 `int`），与 C++ `int32_t` 对齐，确保跨平台序列化一致性
 - 算法逻辑与 C++ 完全一致（所有核心函数已逐行对比确认）
 
 ## License

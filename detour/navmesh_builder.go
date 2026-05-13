@@ -36,9 +36,9 @@ type NavMeshCreateParams struct {
 
 	// Tile Attributes
 	UserID    uint32
-	TileX     int
-	TileY     int
-	TileLayer int
+	TileX     int32
+	TileY     int32
+	TileLayer int32
 	Bmin      [3]float32
 	Bmax      [3]float32
 
@@ -420,9 +420,9 @@ func CreateNavMeshData(params *NavMeshCreateParams) ([]byte, int, bool) {
 	header := &MeshHeader{
 		Magic:           NavMeshMagic,
 		Version:         NavMeshVersion,
-		X:               int32(params.TileX),
-		Y:               int32(params.TileY),
-		Layer:           int32(params.TileLayer),
+		X:               params.TileX,
+		Y:               params.TileY,
+		Layer:           params.TileLayer,
 		UserID:          params.UserID,
 		PolyCount:       int32(totPolyCount),
 		VertCount:       int32(totVertCount),
