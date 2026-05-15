@@ -1141,7 +1141,7 @@ func paintRectRegion(minx, maxx, miny, maxy int, regId uint16, chf *CompactHeigh
 
 // BuildDistanceField builds a distance field from the compact heightfield.
 // This is usually the second to the last step before building regions.
-func BuildDistanceField(ctx context.Context, chf *CompactHeightfield) bool {
+func BuildDistanceField(ctx context.Context, chf *CompactHeightfield) {
 	defer ScopedTimer(ctx, TimerBuildDistanceField)()
 
 	if chf.Dist != nil {
@@ -1159,12 +1159,10 @@ func BuildDistanceField(ctx context.Context, chf *CompactHeightfield) bool {
 
 	// Store distance.
 	chf.Dist = src
-
-	return true
 }
 
 // BuildRegionsMonotone partitions the heightfield into monotone regions.
-func BuildRegionsMonotone(ctx context.Context, chf *CompactHeightfield, borderSize, minRegionArea, mergeRegionArea int) bool {
+func BuildRegionsMonotone(ctx context.Context, chf *CompactHeightfield, borderSize, minRegionArea, mergeRegionArea int) {
 	w := chf.Width
 	h := chf.Height
 	id := uint16(1)
@@ -1295,8 +1293,6 @@ func BuildRegionsMonotone(ctx context.Context, chf *CompactHeightfield, borderSi
 	for i := 0; i < chf.SpanCount; i++ {
 		chf.Spans[i].Reg = srcReg[i]
 	}
-
-	return true
 }
 
 // BuildRegions partitions the compact heightfield into regions using the watershed algorithm.

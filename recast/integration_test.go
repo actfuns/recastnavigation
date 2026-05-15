@@ -65,9 +65,7 @@ func setupContourSet(t *testing.T) (context.Context, *ContourSet) {
 		t.Fatalf("setupContourSet: ErodeWalkableArea failed: %v", err)
 	}
 	// Build distance field
-	if !BuildDistanceField(ctx, chf) {
-		t.Fatal("setupContourSet: BuildDistanceField failed")
-	}
+	BuildDistanceField(ctx, chf)
 	// Build regions
 	if !BuildRegions(ctx, chf, 0, 2, 2) {
 		t.Fatal("setupContourSet: BuildRegions failed")
@@ -138,9 +136,7 @@ func TestFullNavmeshBuild(t *testing.T) {
 	t.Logf("after erosion: %d walkable spans", erodedCount)
 
 	// ---- Stage 4: Build distance field ----
-	if !BuildDistanceField(ctx, chf) {
-		t.Fatal("BuildDistanceField failed")
-	}
+	BuildDistanceField(ctx, chf)
 	if chf.MaxDistance == 0 {
 		t.Fatal("distance field max distance is 0; expected > 0")
 	}
@@ -264,9 +260,7 @@ func TestBuildRegions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 		if !BuildRegions(ctx, chf, 0, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}
@@ -292,9 +286,7 @@ func TestBuildRegions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 		if !BuildRegions(ctx, chf, 2, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}
@@ -322,9 +314,7 @@ func TestBuildRegions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 
 		// Use a large min region area that should filter out all regions on
 		// a small mesh, but because the floor is large enough, some regions
@@ -346,9 +336,7 @@ func TestBuildRegions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx2, chf2) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx2, chf2)
 		largeMin := (chf2.SpanCount + 1) * 10 // larger than any possible region
 		if !BuildRegions(ctx2, chf2, 0, largeMin, largeMin) {
 			t.Fatal("BuildRegions with large minRegionArea failed")
@@ -372,12 +360,8 @@ func TestBuildRegions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
-		if !BuildRegionsMonotone(ctx, chf, 0, 2, 2) {
-			t.Fatal("BuildRegionsMonotone failed")
-		}
+		BuildDistanceField(ctx, chf)
+		BuildRegionsMonotone(ctx, chf, 0, 2, 2)
 
 		regionCount := 0
 		for i := 0; i < chf.SpanCount; i++ {
@@ -442,9 +426,7 @@ func TestBuildContourSet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 		if !BuildRegions(ctx, chf, 2, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}
@@ -472,9 +454,7 @@ func TestBuildContourSet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 		if !BuildRegions(ctx, chf, 0, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}
@@ -492,9 +472,7 @@ func TestBuildContourSet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx2, chf2) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx2, chf2)
 		if !BuildRegions(ctx2, chf2, 0, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}
@@ -517,9 +495,7 @@ func TestBuildContourSet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 		if !BuildRegions(ctx, chf, 0, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}
@@ -564,9 +540,7 @@ func TestFullBuildWithDifferentResolutions(t *testing.T) {
 				t.Fatalf("ErodeWalkableArea failed: %v", err)
 			}
 
-			if !BuildDistanceField(ctx, chf) {
-				t.Fatal("BuildDistanceField failed")
-			}
+			BuildDistanceField(ctx, chf)
 
 			if !BuildRegions(ctx, chf, 0, 2, 2) {
 				t.Fatal("BuildRegions failed")
@@ -652,9 +626,7 @@ func TestErodeAndMarkAreas(t *testing.T) {
 			t.Log("MarkBoxArea: no spans marked with area 42 (box may be outside walkable area)")
 		}
 
-		if !BuildDistanceField(ctx, chf) {
-			t.Fatal("BuildDistanceField failed")
-		}
+		BuildDistanceField(ctx, chf)
 		if !BuildRegions(ctx, chf, 0, 2, 2) {
 			t.Fatal("BuildRegions failed")
 		}

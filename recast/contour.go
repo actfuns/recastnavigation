@@ -204,7 +204,7 @@ func distToPoly(nvert int, verts []float32, p [3]float32) float32 {
 	return dmin
 }
 
-func getHeight(fx, fy, fz float32, cs, ics, ch float32, radius int, hp *HeightPatch) uint16 {
+func getHeight(fx, fy, fz float32, _, ics, ch float32, radius int, hp *HeightPatch) uint16 {
 	ix := int(math.Floor(float64(fx*ics + 0.01)))
 	iz := int(math.Floor(float64(fz*ics + 0.01)))
 	ix = clamp(ix-hp.xmin, 0, hp.width-1)
@@ -501,7 +501,7 @@ func nextIdx(i, n int) int {
 	return 0
 }
 
-func triangulateHull(nverts int, verts []float32, nhull int, hull []int, nin int, tris *[]int) {
+func triangulateHull(_ int, verts []float32, nhull int, hull []int, nin int, tris *[]int) {
 	start := 0
 	left := 1
 	right := nhull - 1

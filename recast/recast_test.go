@@ -492,7 +492,7 @@ func TestCreateHeightfield(t *testing.T) {
 		cellHeight := float32(2)
 		width, height := CalcGridSize(bmin, bmax, cellSize)
 
-		hf := CreateHeightfield(nil, width, height, bmin, bmax, cellSize, cellHeight)
+		hf := CreateHeightfield(context.Background(), width, height, bmin, bmax, cellSize, cellHeight)
 
 		if hf.Width != width {
 			t.Errorf("hf.Width = %d, want %d", hf.Width, width)
