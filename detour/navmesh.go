@@ -920,10 +920,6 @@ func unsafeSizeOfUint8() uintptr             { return unsafe.Sizeof(uint8(0)) }
 func unsafeSizeOfBVNode() uintptr            { return unsafe.Sizeof(BVNode{}) }
 func unsafeSizeOfOffMeshConnection() uintptr { return unsafe.Sizeof(OffMeshConnection{}) }
 
-func bytesToFloat32(b []byte) float32 {
-	return math.Float32frombits(binary.LittleEndian.Uint32(b))
-}
-
 func readFloat32Slice(data []byte, size int) []float32 {
 	count := size / int(unsafe.Sizeof(float32(0)))
 	if count == 0 {
@@ -941,16 +937,6 @@ func readPolySlice(data []byte, count int) []Poly {
 	}
 	src := unsafe.Slice((*Poly)(unsafe.Pointer(&data[0])), count)
 	result := make([]Poly, count)
-	copy(result, src)
-	return result
-}
-
-func readLinkSlice(data []byte, count int) []Link {
-	if count == 0 {
-		return nil
-	}
-	src := unsafe.Slice((*Link)(unsafe.Pointer(&data[0])), count)
-	result := make([]Link, count)
 	copy(result, src)
 	return result
 }
@@ -990,12 +976,6 @@ func readOffMeshConnectionSlice(data []byte, count int) []OffMeshConnection {
 	src := unsafe.Slice((*OffMeshConnection)(unsafe.Pointer(&data[0])), count)
 	result := make([]OffMeshConnection, count)
 	copy(result, src)
-	return result
-}
-
-func readUint8Slice(data []byte, size int) []uint8 {
-	result := make([]uint8, size)
-	copy(result, data[:size])
 	return result
 }
 
