@@ -243,7 +243,7 @@ func (tc *TileCache) AddTile(data []uint8, dataSize int, flags uint8) (Compresse
 	}
 
 	if tc.GetTileAt(header.Tx, header.Ty, header.Tlayer) != nil {
-		return 0, detour.ErrFailure
+		return 0, detour.ErrTileAlreadyExists
 	}
 
 	tile := tc.nextFreeTile
@@ -678,7 +678,7 @@ func (tc *TileCache) BuildNavMeshTile(ref CompressedTileRef, navmesh *detour.Nav
 
 	navData, _ := CreateNavMeshData(params)
 	if navData == nil {
-		return detour.ErrFailure
+		return detour.ErrNavMeshDataBuildFailed
 	}
 
 	// Remove existing tile.

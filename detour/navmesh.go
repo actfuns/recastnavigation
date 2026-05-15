@@ -1110,7 +1110,7 @@ func (m *NavMesh) CalcTileLoc(pos [3]float32) (int, int) {
 // GetTileAndPolyByRef gets the tile and polygon for the specified polygon reference.
 func (m *NavMesh) GetTileAndPolyByRef(ref PolyRef) (*MeshTile, *Poly, error) {
 	if ref == 0 {
-		return nil, nil, ErrFailure
+		return nil, nil, ErrInvalidParam
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int32(it) >= m.MaxTiles {
@@ -1170,7 +1170,7 @@ func (m *NavMesh) GetPolyRefBase(tile *MeshTile) PolyRef {
 // GetOffMeshConnectionPolyEndPoints gets the end points of an off-mesh connection.
 func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef) ([3]float32, [3]float32, error) {
 	if polyRef == 0 {
-		return [3]float32{}, [3]float32{}, ErrFailure
+		return [3]float32{}, [3]float32{}, ErrInvalidParam
 	}
 
 	salt, it, ip := m.DecodePolyID(polyRef)
@@ -1187,7 +1187,7 @@ func (m *NavMesh) GetOffMeshConnectionPolyEndPoints(prevRef, polyRef PolyRef) ([
 	poly := &tile.Polys[ip]
 
 	if poly.GetType() != PolyTypeOffMeshConnection {
-		return [3]float32{}, [3]float32{}, ErrFailure
+		return [3]float32{}, [3]float32{}, ErrNotOffMeshConnection
 	}
 
 	idx0, idx1 := 0, 1
@@ -1243,7 +1243,7 @@ func (m *NavMesh) GetOffMeshConnectionByRef(ref PolyRef) *OffMeshConnection {
 // SetPolyFlags sets the user defined flags for the specified polygon.
 func (m *NavMesh) SetPolyFlags(ref PolyRef, flags uint16) error {
 	if ref == 0 {
-		return ErrFailure
+		return ErrInvalidParam
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int32(it) >= m.MaxTiles {
@@ -1264,7 +1264,7 @@ func (m *NavMesh) SetPolyFlags(ref PolyRef, flags uint16) error {
 // GetPolyFlags gets the user defined flags for the specified polygon.
 func (m *NavMesh) GetPolyFlags(ref PolyRef) (uint16, error) {
 	if ref == 0 {
-		return 0, ErrFailure
+		return 0, ErrInvalidParam
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int32(it) >= m.MaxTiles {
@@ -1284,7 +1284,7 @@ func (m *NavMesh) GetPolyFlags(ref PolyRef) (uint16, error) {
 // SetPolyArea sets the user defined area for the specified polygon.
 func (m *NavMesh) SetPolyArea(ref PolyRef, area uint8) error {
 	if ref == 0 {
-		return ErrFailure
+		return ErrInvalidParam
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int32(it) >= m.MaxTiles {
@@ -1305,7 +1305,7 @@ func (m *NavMesh) SetPolyArea(ref PolyRef, area uint8) error {
 // GetPolyArea gets the user defined area for the specified polygon.
 func (m *NavMesh) GetPolyArea(ref PolyRef) (uint8, error) {
 	if ref == 0 {
-		return 0, ErrFailure
+		return 0, ErrInvalidParam
 	}
 	salt, it, ip := m.DecodePolyID(ref)
 	if int32(it) >= m.MaxTiles {

@@ -1,5 +1,7 @@
 package recast
 
+import "context"
+
 // LevelStackEntry is an entry in the level stack for watershed partitioning.
 type LevelStackEntry struct {
 	x, y, index int
@@ -1139,8 +1141,8 @@ func paintRectRegion(minx, maxx, miny, maxy int, regId uint16, chf *CompactHeigh
 
 // BuildDistanceField builds a distance field from the compact heightfield.
 // This is usually the second to the last step before building regions.
-func BuildDistanceField(ctx *Context, chf *CompactHeightfield) bool {
-	defer ctx.ScopedTimer(TimerBuildDistanceField)()
+func BuildDistanceField(ctx context.Context, chf *CompactHeightfield) bool {
+	defer ScopedTimer(ctx, TimerBuildDistanceField)()
 
 	if chf.Dist != nil {
 		chf.Dist = nil
@@ -1162,7 +1164,7 @@ func BuildDistanceField(ctx *Context, chf *CompactHeightfield) bool {
 }
 
 // BuildRegionsMonotone partitions the heightfield into monotone regions.
-func BuildRegionsMonotone(ctx *Context, chf *CompactHeightfield, borderSize, minRegionArea, mergeRegionArea int) bool {
+func BuildRegionsMonotone(ctx context.Context, chf *CompactHeightfield, borderSize, minRegionArea, mergeRegionArea int) bool {
 	w := chf.Width
 	h := chf.Height
 	id := uint16(1)
@@ -1298,7 +1300,7 @@ func BuildRegionsMonotone(ctx *Context, chf *CompactHeightfield, borderSize, min
 }
 
 // BuildRegions partitions the compact heightfield into regions using the watershed algorithm.
-func BuildRegions(ctx *Context, chf *CompactHeightfield, borderSize, minRegionArea, mergeRegionArea int) bool {
+func BuildRegions(ctx context.Context, chf *CompactHeightfield, borderSize, minRegionArea, mergeRegionArea int) bool {
 	w := chf.Width
 	h := chf.Height
 
@@ -1392,7 +1394,7 @@ func BuildRegions(ctx *Context, chf *CompactHeightfield, borderSize, minRegionAr
 }
 
 // BuildLayerRegions builds regions using layer-based approach (for layered navigation mesh).
-func BuildLayerRegions(ctx *Context, chf *CompactHeightfield, borderSize, minRegionArea int) bool {
+func BuildLayerRegions(ctx context.Context, chf *CompactHeightfield, borderSize, minRegionArea int) bool {
 	w := chf.Width
 	h := chf.Height
 	id := uint16(1)

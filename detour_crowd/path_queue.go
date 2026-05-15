@@ -148,7 +148,7 @@ func (q *PathQueue) GetRequestErr(ref PathQueueRef) error {
 			return q.queue[i].err
 		}
 	}
-	return detour.ErrFailure
+	return detour.ErrRequestNotFound
 }
 
 // GetPathResult gets the result of a completed pathfinding request.
@@ -169,7 +169,7 @@ func (q *PathQueue) GetPathResult(ref PathQueueRef, path []PolyRef, maxPath int)
 			return n, nil
 		}
 	}
-	return 0, detour.ErrFailure
+	return 0, detour.ErrRequestNotFound
 }
 
 // GetNavQuery returns the navigation mesh query used by the path queue.

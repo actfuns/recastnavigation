@@ -1,6 +1,7 @@
 package recast
 
 import (
+	"context"
 	"math"
 	"testing"
 )
@@ -526,7 +527,7 @@ func TestCreateHeightfield(t *testing.T) {
 }
 
 func TestMarkWalkableTriangles(t *testing.T) {
-	var ctx *Context = nil
+	var ctx context.Context = nil
 	walkableSlopeAngle := float32(45)
 	verts := []float32{
 		0, 0, 0,
@@ -572,7 +573,7 @@ func TestMarkWalkableTriangles(t *testing.T) {
 }
 
 func TestClearUnwalkableTriangles(t *testing.T) {
-	var ctx *Context = nil
+	var ctx context.Context = nil
 	walkableSlopeAngle := float32(45)
 	verts := []float32{
 		0, 0, 0,
@@ -628,13 +629,10 @@ func TestRasterizeTriangles(t *testing.T) {
 	flagMergeThr := 1
 
 	t.Run("Rasterize some triangles", func(t *testing.T) {
-		ctx := NewContext(false)
+		ctx := context.Background()
 		solid := CreateHeightfield(ctx, width, height, bmin, bmax, cellSize, cellHeight)
 
-		ok, err := RasterizeTriangles(ctx, verts, 4, tris, areas, 2, solid, flagMergeThr)
-		if !ok {
-			t.Fatal("RasterizeTriangles returned false")
-		}
+		err := RasterizeTriangles(ctx, verts, 4, tris, areas, 2, solid, flagMergeThr)
 		if err != nil {
 			t.Fatalf("RasterizeTriangles returned error: %v", err)
 		}
@@ -750,14 +748,11 @@ func TestRasterizeTriangles(t *testing.T) {
 	})
 
 	t.Run("Unsigned short overload", func(t *testing.T) {
-		ctx := NewContext(false)
+		ctx := context.Background()
 		solid := CreateHeightfield(ctx, width, height, bmin, bmax, cellSize, cellHeight)
 
 		utris := []uint16{0, 1, 2, 0, 3, 1}
-		ok, err := RasterizeTrianglesUShort(ctx, verts, 4, utris, areas, 2, solid, flagMergeThr)
-		if !ok {
-			t.Fatal("RasterizeTrianglesUShort returned false")
-		}
+		err := RasterizeTrianglesUShort(ctx, verts, 4, utris, areas, 2, solid, flagMergeThr)
 		if err != nil {
 			t.Fatalf("RasterizeTrianglesUShort returned error: %v", err)
 		}
@@ -871,7 +866,7 @@ func TestRasterizeTriangles(t *testing.T) {
 	})
 
 	t.Run("Triangle list overload", func(t *testing.T) {
-		ctx := NewContext(false)
+		ctx := context.Background()
 		solid := CreateHeightfield(ctx, width, height, bmin, bmax, cellSize, cellHeight)
 
 		vertsList := []float32{
@@ -882,10 +877,7 @@ func TestRasterizeTriangles(t *testing.T) {
 			0, 0, 1,
 			1, 0, 0,
 		}
-		ok, err := RasterizeTrianglesVerts(ctx, vertsList, areas, 2, solid, flagMergeThr)
-		if !ok {
-			t.Fatal("RasterizeTrianglesVerts returned false")
-		}
+		err := RasterizeTrianglesVerts(ctx, vertsList, areas, 2, solid, flagMergeThr)
 		if err != nil {
 			t.Fatalf("RasterizeTrianglesVerts returned error: %v", err)
 		}

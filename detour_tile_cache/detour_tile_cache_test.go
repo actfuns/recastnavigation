@@ -441,7 +441,7 @@ func TestTileCacheAddTile(t *testing.T) {
 	t.Run("duplicate tile returns error", func(t *testing.T) {
 		data2, size2 := createCompressedTile(t, comp, header, heights, areas, cons)
 		_, err := tc.AddTile(data2, size2, 0)
-		if err != detour.ErrFailure {
+		if err != detour.ErrTileAlreadyExists {
 			t.Fatalf("expected ErrFailure for duplicate tile, got %v", err)
 		}
 	})

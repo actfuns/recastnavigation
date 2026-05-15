@@ -1979,7 +1979,7 @@ func (q *NavMeshQuery) GetPolyHeight(ref PolyRef, pos [3]float32) (float32, erro
 	if ok {
 		return h, nil
 	}
-	return 0, ErrFailure
+	return 0, ErrPointNotOnPoly
 }
 
 func (q *NavMeshQuery) FindNearestPoly(center, halfExtents [3]float32, filter *QueryFilter) (PolyRef, [3]float32, error) {
@@ -2033,7 +2033,7 @@ func (q *NavMeshQuery) FindNearestPoly(center, halfExtents [3]float32, filter *Q
 	if nearest != 0 {
 		return nearest, nearestPtLocal, nil
 	}
-	return 0, [3]float32{}, ErrFailure
+	return 0, [3]float32{}, ErrPolyNotFound
 }
 
 // FindRandomPoint finds a random point in the navigation mesh.
@@ -2057,7 +2057,7 @@ func (q *NavMeshQuery) FindRandomPoint(filter *QueryFilter, randomFunc func() fl
 		}
 	}
 	if hitTile == nil {
-		return 0, [3]float32{}, ErrFailure
+		return 0, [3]float32{}, ErrTileNotFound
 	}
 
 	// Randomly pick one polygon weighted by polygon area.
@@ -2096,7 +2096,7 @@ func (q *NavMeshQuery) FindRandomPoint(filter *QueryFilter, randomFunc func() fl
 	}
 
 	if poly == nil {
-		return 0, [3]float32{}, ErrFailure
+		return 0, [3]float32{}, ErrPolyNotFound
 	}
 
 	// Randomly pick point on polygon.
@@ -2131,7 +2131,7 @@ func (q *NavMeshQuery) FindRandomPointAroundCircle(startRef PolyRef, centerPos [
 
 	startTile, startPoly := q.Nav.GetTileAndPolyByRefUnsafe(startRef)
 	if !filter.PassFilter(startRef, startTile, startPoly) {
-		return 0, [3]float32{}, ErrFailure
+		return 0, [3]float32{}, ErrStartPolyNotPassFilter
 	}
 
 	q.NodePool.Clear()
@@ -2249,7 +2249,7 @@ func (q *NavMeshQuery) FindRandomPointAroundCircle(startRef PolyRef, centerPos [
 	}
 
 	if randomPoly == nil {
-		return 0, [3]float32{}, ErrFailure
+		return 0, [3]float32{}, ErrPolyNotFound
 	}
 
 	// Randomly pick point on polygon.
@@ -2269,6 +2269,7 @@ func (q *NavMeshQuery) FindRandomPointAroundCircle(startRef PolyRef, centerPos [
 
 	return randomPolyRef, resultPt, nil
 }
+
 func (q *NavMeshQuery) QueryPolygons(center, halfExtents [3]float32, filter *QueryFilter, polys []PolyRef, maxPolys int) (int, error) {
 
 	if filter == nil {

@@ -1,6 +1,7 @@
 package recast
 
 import (
+	"context"
 	"math"
 	"testing"
 )
@@ -23,22 +24,22 @@ func defaultTestMesh() (verts []float32, nVerts int, tris []int, nTris int, triA
 
 // setupHeightfield creates a Context and a Heightfield from the default test mesh,
 // using the provided cell size and cell height.
-func setupHeightfield(t *testing.T, cs, ch float32) (*Context, *Heightfield) {
+func setupHeightfield(t *testing.T, cs, ch float32) (context.Context, *Heightfield) {
 	t.Helper()
 	verts, nVerts, tris, nTris, triAreas := defaultTestMesh()
 	bmin, bmax := CalcBounds(verts, nVerts)
 	width, height := CalcGridSize(bmin, bmax, cs)
-	ctx := NewContext(false)
+	ctx := context.Background()
 	solid := CreateHeightfield(ctx, width, height, bmin, bmax, cs, ch)
-	ok, err := RasterizeTriangles(ctx, verts, nVerts, tris, triAreas, nTris, solid, 1)
-	if !ok || err != nil {
-		t.Fatalf("setupHeightfield: RasterizeTriangles failed: ok=%v err=%v", ok, err)
+	err := RasterizeTriangles(ctx, verts, nVerts, tris, triAreas, nTris, solid, 1)
+	if err != nil {
+		t.Fatalf("setupHeightfield: RasterizeTriangles failed: err=%v", err)
 	}
 	return ctx, solid
 }
 
 // setupCompactHeightfield creates the complete pipeline up through BuildCompactHeightfield.
-func setupCompactHeightfield(t *testing.T, cs, ch float32) (*Context, *CompactHeightfield) {
+func setupCompactHeightfield(t *testing.T, cs, ch float32) (context.Context, *CompactHeightfield) {
 	t.Helper()
 	ctx, solid := setupHeightfield(t, cs, ch)
 	chf, err := BuildCompactHeightfield(ctx, 2, 1, solid)
@@ -55,11 +56,11 @@ func setupCompactHeightfield(t *testing.T, cs, ch float32) (*Context, *CompactHe
 }
 
 // setupContourSet runs the full pipeline up through BuildContours.
-func setupContourSet(t *testing.T) (*Context, *ContourSet) {
+func setupContourSet(t *testing.T) (context.Context, *ContourSet) {
 	t.Helper()
 	ctx, chf := setupCompactHeightfield(t, 0.3, 0.2)
 	// Erode
-	_, err := ErodeWalkableArea(ctx, 1, chf)
+	err := ErodeWalkableArea(ctx, 1, chf)
 	if err != nil {
 		t.Fatalf("setupContourSet: ErodeWalkableArea failed: %v", err)
 	}
@@ -121,9 +122,9 @@ func TestFullNavmeshBuild(t *testing.T) {
 	t.Logf("compact heightfield: %dx%d, %d spans", chf.Width, chf.Height, chf.SpanCount)
 
 	// ---- Stage 3: Erode walkable area ----
-	ok, err := ErodeWalkableArea(ctx, 1, chf)
-	if !ok || err != nil {
-		t.Fatalf("ErodeWalkableArea failed: ok=%v err=%v", ok, err)
+	err = ErodeWalkableArea(ctx, 1, chf)
+	if err != nil {
+		t.Fatalf("ErodeWalkableArea failed: err=%v", err)
 	}
 	erodedCount := 0
 	for i := 0; i < chf.SpanCount; i++ {
@@ -212,7 +213,7 @@ func TestFullNavmeshBuild(t *testing.T) {
 
 	// ---- Stage 8: Build detail mesh ----
 	dmesh := &PolyMeshDetail{}
-	ok = BuildPolyMeshDetail(ctx, mesh, chf, 6, 1, dmesh)
+	ok := BuildPolyMeshDetail(ctx, mesh, chf, 6, 1, dmesh)
 	if !ok {
 		t.Fatal("BuildPolyMeshDetail failed")
 	}
@@ -259,7 +260,7 @@ func TestBuildRegions(t *testing.T) {
 
 	t.Run("no border, small min region area", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, cs, ch)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -287,7 +288,7 @@ func TestBuildRegions(t *testing.T) {
 
 	t.Run("with border (borderSize=2)", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, cs, ch)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -317,7 +318,7 @@ func TestBuildRegions(t *testing.T) {
 
 	t.Run("large min region area (filters small regions)", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, cs, ch)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -341,7 +342,7 @@ func TestBuildRegions(t *testing.T) {
 
 		// Rebuild with larger min area and compare.
 		ctx2, chf2 := setupCompactHeightfield(t, cs, ch)
-		_, err = ErodeWalkableArea(ctx2, 1, chf2)
+		err = ErodeWalkableArea(ctx2, 1, chf2)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -367,7 +368,7 @@ func TestBuildRegions(t *testing.T) {
 
 	t.Run("monotone region building", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, cs, ch)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -437,7 +438,7 @@ func TestBuildContourSet(t *testing.T) {
 
 	t.Run("with border", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, 0.3, 0.2)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -467,7 +468,7 @@ func TestBuildContourSet(t *testing.T) {
 
 	t.Run("different max simplification error", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, 0.3, 0.2)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -487,7 +488,7 @@ func TestBuildContourSet(t *testing.T) {
 		// Build contours with higher error (more simplification).
 		// Rebuild regions since BuildContours doesn't modify chf.
 		ctx2, chf2 := setupCompactHeightfield(t, 0.3, 0.2)
-		_, err = ErodeWalkableArea(ctx2, 1, chf2)
+		err = ErodeWalkableArea(ctx2, 1, chf2)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -512,7 +513,7 @@ func TestBuildContourSet(t *testing.T) {
 
 	t.Run("no build flags", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, 0.3, 0.2)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -558,7 +559,7 @@ func TestFullBuildWithDifferentResolutions(t *testing.T) {
 				t.Fatal("no walkable spans")
 			}
 
-			_, err = ErodeWalkableArea(ctx, 1, chf)
+			err = ErodeWalkableArea(ctx, 1, chf)
 			if err != nil {
 				t.Fatalf("ErodeWalkableArea failed: %v", err)
 			}
@@ -598,49 +599,6 @@ func TestFullBuildWithDifferentResolutions(t *testing.T) {
 	}
 }
 
-// TestContextHandling verifies that functions return appropriate errors when
-// called with a nil context.
-func TestContextHandling(t *testing.T) {
-	t.Run("BuildCompactHeightfield with nil context", func(t *testing.T) {
-		_, err := BuildCompactHeightfield(nil, 2, 1, &Heightfield{
-			Width: 10, Height: 10,
-			Bmin: [3]float32{0, 0, 0},
-			Bmax: [3]float32{10, 1, 10},
-			Cs:   0.3, Ch: 0.2,
-			Spans: make([]*Span, 100),
-		})
-		if err == nil {
-			t.Error("expected error for nil context, got nil")
-		}
-	})
-
-	t.Run("ErodeWalkableArea with nil context", func(t *testing.T) {
-		_, err := ErodeWalkableArea(nil, 1, &CompactHeightfield{
-			Width: 10, Height: 10, SpanCount: 100,
-			Cells: make([]CompactCell, 100),
-			Spans: make([]CompactSpan, 100),
-			Areas: make([]uint8, 100),
-		})
-		if err == nil {
-			t.Error("expected error for nil context, got nil")
-		}
-	})
-
-	t.Run("RasterizeTriangle with nil context", func(t *testing.T) {
-		v := [3]float32{0, 0, 0}
-		_, err := RasterizeTriangle(nil, v, v, v, 1, &Heightfield{
-			Width: 10, Height: 10,
-			Bmin: [3]float32{0, 0, 0},
-			Bmax: [3]float32{10, 1, 10},
-			Cs:   0.3, Ch: 0.2,
-			Spans: make([]*Span, 100),
-		}, 1)
-		if err == nil {
-			t.Error("expected error for nil context, got nil")
-		}
-	})
-}
-
 // TestErodeAndMarkAreas tests the ErodeWalkableArea function in combination
 // with area marking functions (MarkBoxArea, MarkCylinderArea, MarkConvexPolyArea).
 func TestErodeAndMarkAreas(t *testing.T) {
@@ -649,7 +607,7 @@ func TestErodeAndMarkAreas(t *testing.T) {
 		originalAreas := make([]uint8, len(chf.Areas))
 		copy(originalAreas, chf.Areas)
 
-		_, err := ErodeWalkableArea(ctx, 0, chf)
+		err := ErodeWalkableArea(ctx, 0, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea with zero radius failed: %v", err)
 		}
@@ -669,7 +627,7 @@ func TestErodeAndMarkAreas(t *testing.T) {
 
 	t.Run("erode then mark box area", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, 0.3, 0.2)
-		_, err := ErodeWalkableArea(ctx, 1, chf)
+		err := ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea failed: %v", err)
 		}
@@ -705,14 +663,14 @@ func TestErodeAndMarkAreas(t *testing.T) {
 
 	t.Run("median filter preserves connectivity", func(t *testing.T) {
 		ctx, chf := setupCompactHeightfield(t, 0.3, 0.2)
-		_, err := MedianFilterWalkableArea(ctx, chf)
+		err := MedianFilterWalkableArea(ctx, chf)
 		if err != nil {
 			t.Fatalf("MedianFilterWalkableArea failed: %v", err)
 		}
 
 		// After median filtering, some areas may change but the
 		// heightfield should still be valid for further processing.
-		_, err = ErodeWalkableArea(ctx, 1, chf)
+		err = ErodeWalkableArea(ctx, 1, chf)
 		if err != nil {
 			t.Fatalf("ErodeWalkableArea after median filter failed: %v", err)
 		}

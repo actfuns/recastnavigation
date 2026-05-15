@@ -1,11 +1,12 @@
 package recast
 
 import (
+	"context"
 	"testing"
 )
 
 func TestAddSpan(t *testing.T) {
-	ctx := NewContext(false)
+	ctx := context.Background()
 
 	const xSize = 4
 	const ySize = 10
@@ -23,9 +24,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Add a span to an empty heightfield", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span at (0,0)")
@@ -48,18 +49,18 @@ func TestAddSpan(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
 		// min == max
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 0, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 0, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] != nil {
 			t.Error("expected nil span for zero-size span")
 		}
 
 		// min > max
-		ok, err = AddSpan(ctx, hf, 0, 0, 1, 0, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 1, 0, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] != nil {
 			t.Error("expected nil span for inverted span")
@@ -69,9 +70,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Two spans that are not touching are not merged", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -89,9 +90,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -116,9 +117,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Two spans with different area ids within the flag merge threshold are merged and the highest area ID is used", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 1, 42, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 1, 42, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -136,9 +137,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 1, 2, 24, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 1, 2, 24, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -160,9 +161,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Two spans with different area ids outside the flag merge threshold are merged and the area ID of the last span added is used", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 1, 42, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 1, 42, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -180,9 +181,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 1, 8, 24, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 1, 8, 24, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -204,9 +205,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Add a span that gets merged with an existing span", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -224,9 +225,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 1, 2, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 1, 2, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -248,9 +249,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Add a span that merges with two spans above and below", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -268,9 +269,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0].Next == nil {
 			t.Fatal("expected non-nil Next")
@@ -289,9 +290,9 @@ func TestAddSpan(t *testing.T) {
 		}
 
 		// After adding the third span, they should all get merged into a single span.
-		ok, err = AddSpan(ctx, hf, 0, 0, 1, 2, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 1, 2, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -313,17 +314,17 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Spans are insertion-sorted in ascending order of Y value", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
-		ok, err = AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 0, 1, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
-		ok, err = AddSpan(ctx, hf, 0, 0, 6, 7, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 6, 7, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 
 		if hf.Spans[0] == nil {
@@ -372,9 +373,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Adding a span inside another span merges them", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 8, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 8, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -392,9 +393,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 2, 3, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -416,9 +417,9 @@ func TestAddSpan(t *testing.T) {
 	t.Run("Overlapping spans are merged", func(t *testing.T) {
 		hf := CreateHeightfield(ctx, xSize, zSize, minBounds, maxBounds, cellSize, cellHeight)
 
-		ok, err := AddSpan(ctx, hf, 0, 0, 0, 4, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err := AddSpan(ctx, hf, 0, 0, 0, 4, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -436,9 +437,9 @@ func TestAddSpan(t *testing.T) {
 			t.Error("expected nil Next")
 		}
 
-		ok, err = AddSpan(ctx, hf, 0, 0, 2, 6, area, flagMergeThr)
-		if !ok || err != nil {
-			t.Fatalf("AddSpan failed: ok=%v, err=%v", ok, err)
+		err = AddSpan(ctx, hf, 0, 0, 2, 6, area, flagMergeThr)
+		if err != nil {
+			t.Fatalf("AddSpan failed: err=%v", err)
 		}
 		if hf.Spans[0] == nil {
 			t.Fatal("expected non-nil span")
@@ -459,7 +460,7 @@ func TestAddSpan(t *testing.T) {
 }
 
 func TestAllocSpan(t *testing.T) {
-	ctx := NewContext(false)
+	ctx := context.Background()
 
 	const xSize = 50
 	const zSize = 50
@@ -479,9 +480,9 @@ func TestAllocSpan(t *testing.T) {
 
 		for x := 0; x < xSize; x++ {
 			for z := 0; z < zSize; z++ {
-				ok, err := AddSpan(ctx, hf, x, z, 0, 1, area, flagMergeThr)
-				if !ok || err != nil {
-					t.Fatalf("AddSpan at (%d,%d) failed: ok=%v, err=%v", x, z, ok, err)
+				err := AddSpan(ctx, hf, x, z, 0, 1, area, flagMergeThr)
+				if err != nil {
+					t.Fatalf("AddSpan at (%d,%d) failed: err=%v", x, z, err)
 				}
 			}
 		}
@@ -489,7 +490,7 @@ func TestAllocSpan(t *testing.T) {
 }
 
 func TestRasterizeTriangle(t *testing.T) {
-	ctx := NewContext(false)
+	ctx := context.Background()
 
 	const xSize = 10
 	const ySize = 10
@@ -519,9 +520,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{2, 0, 0}
 		v2 := [3]float32{0, 0, 2}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -559,9 +560,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{1, 0, 0}
 		v2 := [3]float32{0, 0, 1}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -599,9 +600,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{4, 0, -2}
 		v2 := [3]float32{-2, 0, 4}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -641,9 +642,9 @@ func TestRasterizeTriangle(t *testing.T) {
 			v1 := [3]float32{-5, 0, 5}
 			v2 := [3]float32{5, 0, -5}
 
-			ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-			if !ok || err != nil {
-				t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+			err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+			if err != nil {
+				t.Fatalf("RasterizeTriangle failed: err=%v", err)
 			}
 			assertNoSpans(t, hf)
 		}()
@@ -656,9 +657,9 @@ func TestRasterizeTriangle(t *testing.T) {
 			v1 := [3]float32{5, -1, 5}
 			v2 := [3]float32{5, -1, 0}
 
-			ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-			if !ok || err != nil {
-				t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+			err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+			if err != nil {
+				t.Fatalf("RasterizeTriangle failed: err=%v", err)
 			}
 			assertNoSpans(t, hf)
 		}()
@@ -671,9 +672,9 @@ func TestRasterizeTriangle(t *testing.T) {
 			v1 := [3]float32{5, 40, 5}
 			v2 := [3]float32{5, 40, 0}
 
-			ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-			if !ok || err != nil {
-				t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+			err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+			if err != nil {
+				t.Fatalf("RasterizeTriangle failed: err=%v", err)
 			}
 			assertNoSpans(t, hf)
 		}()
@@ -686,9 +687,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{1.01, 0, -1}
 		v2 := [3]float32{-1, 0, 1.01}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -726,9 +727,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{0.5, 0, 0.5}
 		v2 := [3]float32{0.5, 2.01, 0.5}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -766,9 +767,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{4, 0, 0.5}
 		v2 := [3]float32{2, 2, 0.5}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -822,9 +823,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{1, -5, 1}
 		v2 := [3]float32{0.5, 15, 0.5}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {
@@ -866,9 +867,9 @@ func TestRasterizeTriangle(t *testing.T) {
 			v1 := [3]float32{2, 0, 0.5}
 			v2 := [3]float32{4, 0, 0.5}
 
-			ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-			if !ok || err != nil {
-				t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+			err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+			if err != nil {
+				t.Fatalf("RasterizeTriangle failed: err=%v", err)
 			}
 			assertNoSpans(t, hf)
 		}()
@@ -879,9 +880,9 @@ func TestRasterizeTriangle(t *testing.T) {
 
 			v0 := [3]float32{0.5, 0, 0.5}
 
-			ok, err := RasterizeTriangle(ctx, v0, v0, v0, WalkableArea, hf, 1)
-			if !ok || err != nil {
-				t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+			err := RasterizeTriangle(ctx, v0, v0, v0, WalkableArea, hf, 1)
+			if err != nil {
+				t.Fatalf("RasterizeTriangle failed: err=%v", err)
 			}
 			assertNoSpans(t, hf)
 		}()
@@ -894,9 +895,9 @@ func TestRasterizeTriangle(t *testing.T) {
 		v1 := [3]float32{-10, 5.5, 3}
 		v2 := [3]float32{3, 5.5, -10}
 
-		ok, err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
-		if !ok || err != nil {
-			t.Fatalf("RasterizeTriangle failed: ok=%v, err=%v", ok, err)
+		err := RasterizeTriangle(ctx, v0, v1, v2, WalkableArea, hf, 1)
+		if err != nil {
+			t.Fatalf("RasterizeTriangle failed: err=%v", err)
 		}
 
 		for x := 0; x < xSize; x++ {

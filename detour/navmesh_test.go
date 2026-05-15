@@ -1525,14 +1525,14 @@ func TestSetGetPolyFlags(t *testing.T) {
 
 	t.Run("GetPolyFlags with zero ref", func(t *testing.T) {
 		_, err := m.GetPolyFlags(0)
-		if err != ErrFailure {
+		if err != ErrInvalidParam {
 			t.Fatalf("expected ErrFailure, got %v", err)
 		}
 	})
 
 	t.Run("SetPolyFlags with zero ref", func(t *testing.T) {
 		err := m.SetPolyFlags(0, 0xffff)
-		if err != ErrFailure {
+		if err != ErrInvalidParam {
 			t.Fatalf("expected ErrFailure, got %v", err)
 		}
 	})
@@ -1572,14 +1572,14 @@ func TestSetGetPolyArea(t *testing.T) {
 
 	t.Run("GetPolyArea with zero ref", func(t *testing.T) {
 		_, err := m.GetPolyArea(0)
-		if err != ErrFailure {
+		if err != ErrInvalidParam {
 			t.Fatalf("expected ErrFailure, got %v", err)
 		}
 	})
 
 	t.Run("SetPolyArea with zero ref", func(t *testing.T) {
 		err := m.SetPolyArea(0, 1)
-		if err != ErrFailure {
+		if err != ErrInvalidParam {
 			t.Fatalf("expected ErrFailure, got %v", err)
 		}
 	})
@@ -1694,7 +1694,7 @@ func TestGetOffMeshConnectionPolyEndPoints(t *testing.T) {
 
 	t.Run("zero ref returns error", func(t *testing.T) {
 		_, _, err := m.GetOffMeshConnectionPolyEndPoints(0, 0)
-		if err != ErrFailure {
+		if err != ErrInvalidParam {
 			t.Fatalf("expected ErrFailure, got %v", err)
 		}
 	})
@@ -1711,7 +1711,7 @@ func TestGetOffMeshConnectionPolyEndPoints(t *testing.T) {
 			t.Skip("no ref found")
 		}
 		_, _, err := m.GetOffMeshConnectionPolyEndPoints(0, ref)
-		if err != ErrFailure {
+		if err != ErrNotOffMeshConnection {
 			t.Fatalf("expected ErrFailure for ground poly, got %v", err)
 		}
 	})

@@ -1,7 +1,10 @@
 // Package recast implements navigation mesh generation.
 package recast
 
-import "math"
+import (
+	"errors"
+	"math"
+)
 
 // Constants
 
@@ -54,6 +57,20 @@ const Epsilon = 1e-6
 
 // MiterLimit defines the limit at which a miter becomes a bevel.
 const MiterLimit = 1.20
+
+// Errors
+
+// Errors returned by recast processing.
+var (
+	// ErrOutOfMemory is returned when rasterization runs out of memory.
+	ErrOutOfMemory = errors.New("recast: out of memory")
+
+	// ErrRegionIDOverflow is returned when region ID exceeds limit.
+	ErrRegionIDOverflow = errors.New("recast: region id overflow")
+
+	// ErrLayerOverflow is returned when too many overlapping walkable platforms exist.
+	ErrLayerOverflow = errors.New("recast: layer overflow")
+)
 
 // Log categories
 

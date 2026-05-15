@@ -1,7 +1,9 @@
 // Package recast implements navigation mesh generation.
 package recast
 
-import "fmt"
+import (
+	"context"
+)
 
 // InsertSort sorts the given data in-place using insertion sort.
 func insertSort(data []uint8) {
@@ -16,17 +18,13 @@ func insertSort(data []uint8) {
 	}
 }
 
-// ErodeWalkableArea erodes the walkable area within the heightfield by the specified radius.
-func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield) (bool, error) {
-	if ctx == nil {
-		return false, fmt.Errorf("recast: ctx must not be nil")
-	}
-
+// ErodeWalkableArea erodes the walkable area of a compact heightfield.
+func ErodeWalkableArea(ctx context.Context, erosionRadius int, chf *CompactHeightfield) error {
 	xSize := chf.Width
 	zSize := chf.Height
 	zStride := xSize // For readability
 
-	defer ctx.ScopedTimer(TimerErodeArea)()
+	defer ScopedTimer(ctx, TimerErodeArea)()
 
 	distanceToBoundary := make([]uint8, chf.SpanCount)
 	for i := range distanceToBoundary {
@@ -191,20 +189,16 @@ func ErodeWalkableArea(ctx *Context, erosionRadius int, chf *CompactHeightfield)
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
-// MedianFilterWalkableArea applies a median filter to walkable area types (based on area id), removing noise.
-func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) (bool, error) {
-	if ctx == nil {
-		return false, fmt.Errorf("recast: ctx must not be nil")
-	}
-
+// MedianFilterWalkableArea applies a median filter to the walkable area of a compact heightfield.
+func MedianFilterWalkableArea(ctx context.Context, chf *CompactHeightfield) error {
 	xSize := chf.Width
 	zSize := chf.Height
 	zStride := xSize // For readability
 
-	defer ctx.ScopedTimer(TimerMedianArea)()
+	defer ScopedTimer(ctx, TimerMedianArea)()
 
 	areas := make([]uint8, chf.SpanCount)
 	for i := range areas {
@@ -259,16 +253,12 @@ func MedianFilterWalkableArea(ctx *Context, chf *CompactHeightfield) (bool, erro
 
 	copy(chf.Areas, areas)
 
-	return true, nil
+	return nil
 }
 
 // MarkBoxArea applies an area id to all spans within the specified bounding box (AABB).
-func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds [3]float32, areaID uint8, chf *CompactHeightfield) error {
-	if ctx == nil {
-		return fmt.Errorf("recast: ctx must not be nil")
-	}
-
-	defer ctx.ScopedTimer(TimerMarkBoxArea)()
+func MarkBoxArea(ctx context.Context, boxMinBounds, boxMaxBounds [3]float32, areaID uint8, chf *CompactHeightfield) error {
+	defer ScopedTimer(ctx, TimerMarkBoxArea)()
 
 	xSize := chf.Width
 	zSize := chf.Height
@@ -328,12 +318,8 @@ func MarkBoxArea(ctx *Context, boxMinBounds, boxMaxBounds [3]float32, areaID uin
 }
 
 // MarkConvexPolyArea applies the area id to all spans within the specified convex polygon.
-func MarkConvexPolyArea(ctx *Context, verts []float32, numVerts int, minY, maxY float32, areaID uint8, chf *CompactHeightfield) error {
-	if ctx == nil {
-		return fmt.Errorf("recast: ctx must not be nil")
-	}
-
-	defer ctx.ScopedTimer(TimerMarkConvexPolyArea)()
+func MarkConvexPolyArea(ctx context.Context, verts []float32, numVerts int, minY, maxY float32, areaID uint8, chf *CompactHeightfield) error {
+	defer ScopedTimer(ctx, TimerMarkConvexPolyArea)()
 
 	xSize := chf.Width
 	zSize := chf.Height
@@ -494,12 +480,8 @@ func OffsetPoly(verts []float32, numVerts int, offset float32, outVerts []float3
 }
 
 // MarkCylinderArea applies the area id to all spans within the specified y-axis-aligned cylinder.
-func MarkCylinderArea(ctx *Context, position [3]float32, radius, height float32, areaID uint8, chf *CompactHeightfield) error {
-	if ctx == nil {
-		return fmt.Errorf("recast: ctx must not be nil")
-	}
-
-	defer ctx.ScopedTimer(TimerMarkCylinderArea)()
+func MarkCylinderArea(ctx context.Context, position [3]float32, radius, height float32, areaID uint8, chf *CompactHeightfield) error {
+	defer ScopedTimer(ctx, TimerMarkCylinderArea)()
 
 	xSize := chf.Width
 	zSize := chf.Height

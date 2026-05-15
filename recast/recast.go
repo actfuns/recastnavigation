@@ -2,7 +2,8 @@
 package recast
 
 import (
-	"fmt"
+	"context"
+	"log/slog"
 	"math"
 )
 
@@ -40,7 +41,7 @@ func CalcGridSize(minBounds, maxBounds [3]float32, cellSize float32) (int, int) 
 }
 
 // CreateHeightfield initializes and returns a new heightfield.
-func CreateHeightfield(ctx *Context, sizeX, sizeZ int, minBounds, maxBounds [3]float32, cellSize, cellHeight float32) *Heightfield {
+func CreateHeightfield(ctx context.Context, sizeX, sizeZ int, minBounds, maxBounds [3]float32, cellSize, cellHeight float32) *Heightfield {
 	return &Heightfield{
 		Width:  sizeX,
 		Height: sizeZ,
@@ -53,7 +54,7 @@ func CreateHeightfield(ctx *Context, sizeX, sizeZ int, minBounds, maxBounds [3]f
 }
 
 // MarkWalkableTriangles sets the area id of all triangles with a slope below the specified value to WalkableArea.
-func MarkWalkableTriangles(ctx *Context, walkableSlopeAngle float32, verts []float32, numVerts int, tris []int, numTris int, triAreaIDs []uint8) {
+func MarkWalkableTriangles(ctx context.Context, walkableSlopeAngle float32, verts []float32, numVerts int, tris []int, numTris int, triAreaIDs []uint8) {
 	walkableThr := float32(math.Cos(float64(walkableSlopeAngle / 180.0 * Pi)))
 
 	for i := 0; i < numTris; i++ {
@@ -69,7 +70,7 @@ func MarkWalkableTriangles(ctx *Context, walkableSlopeAngle float32, verts []flo
 }
 
 // ClearUnwalkableTriangles sets the area id of all triangles with a slope greater than or equal to the specified value to NullArea.
-func ClearUnwalkableTriangles(ctx *Context, walkableSlopeAngle float32, verts []float32, numVerts int, tris []int, numTris int, triAreaIDs []uint8) {
+func ClearUnwalkableTriangles(ctx context.Context, walkableSlopeAngle float32, verts []float32, numVerts int, tris []int, numTris int, triAreaIDs []uint8) {
 	walkableLimitY := float32(math.Cos(float64(walkableSlopeAngle / 180.0 * Pi)))
 
 	for i := 0; i < numTris; i++ {
@@ -85,7 +86,7 @@ func ClearUnwalkableTriangles(ctx *Context, walkableSlopeAngle float32, verts []
 }
 
 // HeightFieldSpanCount returns the number of non-null spans contained in the specified heightfield.
-func HeightFieldSpanCount(ctx *Context, hf *Heightfield) int {
+func HeightFieldSpanCount(ctx context.Context, hf *Heightfield) int {
 	numCols := hf.Width * hf.Height
 	spanCount := 0
 	for columnIndex := 0; columnIndex < numCols; columnIndex++ {
@@ -99,12 +100,8 @@ func HeightFieldSpanCount(ctx *Context, hf *Heightfield) int {
 }
 
 // BuildCompactHeightfield builds and returns a compact heightfield representing open space, from a heightfield representing solid space.
-func BuildCompactHeightfield(ctx *Context, walkableHeight, walkableClimb int, hf *Heightfield) (*CompactHeightfield, error) {
-	if ctx == nil {
-		return nil, fmt.Errorf("recast: ctx must not be nil")
-	}
-
-	defer ctx.ScopedTimer(TimerBuildCompactHeightfield)()
+func BuildCompactHeightfield(ctx context.Context, walkableHeight, walkableClimb int, hf *Heightfield) (*CompactHeightfield, error) {
+	defer ScopedTimer(ctx, TimerBuildCompactHeightfield)()
 
 	xSize := hf.Width
 	zSize := hf.Height
@@ -214,7 +211,7 @@ func BuildCompactHeightfield(ctx *Context, walkableHeight, walkableClimb int, hf
 	}
 
 	if maxLayerIndex > maxLayers {
-		ctx.Log(LogError, "BuildCompactHeightfield: Heightfield has too many layers %d (max: %d)", maxLayerIndex, maxLayers)
+		slog.ErrorContext(ctx, "heightfield has too many layers", "module", "BuildCompactHeightfield", "layer_count", maxLayerIndex, "max_layers", maxLayers)
 	}
 
 	return chf, nil

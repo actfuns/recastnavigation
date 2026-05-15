@@ -1,10 +1,12 @@
 package recast
 
 import (
+	"context"
+	"log/slog"
 	"math"
 )
 
-func getHeightDataSeeds(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly int, verts []uint16, bs int, hp *HeightPatch, queue *[]int) {
+func getHeightDataSeeds(ctx context.Context, chf *CompactHeightfield, poly []uint16, npoly int, verts []uint16, bs int, hp *HeightPatch, queue *[]int) {
 	offset := [18]int{
 		0, 0, -1, -1, 0, -1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, -1, 0,
 	}
@@ -64,7 +66,7 @@ func getHeightDataSeeds(ctx *Context, chf *CompactHeightfield, poly []uint16, np
 	ci := -1
 	for {
 		if len(*queue) < 3 {
-			ctx.Log(LogWarning, "Walk towards polygon center failed to reach center")
+			slog.WarnContext(ctx, "Walk towards polygon center failed to reach center")
 			break
 		}
 
@@ -138,7 +140,7 @@ func push3(queue *[]int, v1, v2, v3 int) {
 	*queue = append(*queue, v1, v2, v3)
 }
 
-func getHeightData(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly int, verts []uint16, bs int, hp *HeightPatch, queue *[]int, region uint16) {
+func getHeightData(ctx context.Context, chf *CompactHeightfield, poly []uint16, npoly int, verts []uint16, bs int, hp *HeightPatch, queue *[]int, region uint16) {
 	*queue = (*queue)[:0]
 
 	for i := 0; i < hp.width*hp.height; i++ {
@@ -231,7 +233,7 @@ func getHeightData(ctx *Context, chf *CompactHeightfield, poly []uint16, npoly i
 	}
 }
 
-func buildPolyDetail(ctx *Context, in []float32, nin int,
+func buildPolyDetail(ctx context.Context, in []float32, nin int,
 	sampleDist, sampleMaxError float32,
 	heightSearchRadius int, chf *CompactHeightfield,
 	hp *HeightPatch, verts []float32,
@@ -366,7 +368,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 	triangulateHull(nverts, verts, nhull, hull[:nhull], nin, &tris)
 
 	if len(tris) == 0 {
-		ctx.Log(LogWarning, "buildPolyDetail: Could not triangulate polygon (%d verts).", nverts)
+		slog.WarnContext(ctx, "could not triangulate polygon", "module", "buildPolyDetail", "vertex_count", nverts)
 		*nvertsOut = nverts
 		*trisOut = tris
 		*edgesOut = edges
@@ -460,7 +462,7 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 	ntris := len(tris) / 4
 	if ntris > maxTris {
 		tris = tris[:maxTris*4]
-		ctx.Log(LogError, "BuildPolyMeshDetail: Shrinking triangle count from %d to max %d.", ntris, maxTris)
+		slog.ErrorContext(ctx, "triangle count exceeds limit, shrinking", "module", "BuildPolyMeshDetail", "original_tris", ntris, "max_tris", maxTris)
 	}
 
 	setTriFlags(&tris, nhull, hull[:nhull])
@@ -471,12 +473,12 @@ func buildPolyDetail(ctx *Context, in []float32, nin int,
 }
 
 // BuildPolyMeshDetail builds the detail mesh for a polygon mesh.
-func BuildPolyMeshDetail(ctx *Context, mesh *PolyMesh, chf *CompactHeightfield, sampleDist, sampleMaxError float32, dmesh *PolyMeshDetail) bool {
+func BuildPolyMeshDetail(ctx context.Context, mesh *PolyMesh, chf *CompactHeightfield, sampleDist, sampleMaxError float32, dmesh *PolyMeshDetail) bool {
 	if mesh.Nverts == 0 || mesh.Npolys == 0 {
 		return true
 	}
 
-	defer ctx.ScopedTimer(TimerBuildPolyMeshDetail)()
+	defer ScopedTimer(ctx, TimerBuildPolyMeshDetail)()
 
 	nvp := mesh.Nvp
 	cs := mesh.Cs
@@ -608,8 +610,8 @@ func BuildPolyMeshDetail(ctx *Context, mesh *PolyMesh, chf *CompactHeightfield, 
 }
 
 // MergePolyMeshDetails merges multiple detail meshes into one.
-func MergePolyMeshDetails(ctx *Context, meshes []*PolyMeshDetail, mesh *PolyMeshDetail) bool {
-	defer ctx.ScopedTimer(TimerMergePolyMeshDetail)()
+func MergePolyMeshDetails(ctx context.Context, meshes []*PolyMeshDetail, mesh *PolyMeshDetail) bool {
+	defer ScopedTimer(ctx, TimerMergePolyMeshDetail)()
 
 	maxVerts := 0
 	maxTris := 0

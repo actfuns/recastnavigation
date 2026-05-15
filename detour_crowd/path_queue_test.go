@@ -245,8 +245,8 @@ func TestPathQueueGetRequestErr(t *testing.T) {
 		q.Init(256, 4096, navQuery)
 
 		err := q.GetRequestErr(999)
-		if err != detour.ErrFailure {
-			t.Errorf("GetRequestErr(999) = %v, want %v", err, detour.ErrFailure)
+		if err != detour.ErrRequestNotFound {
+			t.Errorf("GetRequestErr(999) = %v, want %v", err, detour.ErrRequestNotFound)
 		}
 	})
 
@@ -272,8 +272,8 @@ func TestPathQueueGetPathResult(t *testing.T) {
 
 		buf := make([]PolyRef, 256)
 		n, err := q.GetPathResult(999, buf, 256)
-		if err != detour.ErrFailure {
-			t.Errorf("GetPathResult unknown ref: err = %v, want %v", err, detour.ErrFailure)
+		if err != detour.ErrRequestNotFound {
+			t.Errorf("GetPathResult unknown ref: err = %v, want %v", err, detour.ErrRequestNotFound)
 		}
 		if n != 0 {
 			t.Errorf("GetPathResult unknown ref: n = %d, want 0", n)
@@ -319,8 +319,8 @@ func TestPathQueueGetPathResult(t *testing.T) {
 
 		// After GetPathResult, the request should be freed
 		err2 := q.GetRequestErr(ref)
-		if err2 != detour.ErrFailure {
-			t.Errorf("request should be freed after GetPathResult, got err = %v, want ErrFailure", err2)
+		if err2 != detour.ErrRequestNotFound {
+			t.Errorf("request should be freed after GetPathResult, got err = %v, want ErrRequestNotFound", err2)
 		}
 	})
 
@@ -382,7 +382,7 @@ func TestPathQueueGetPathResult(t *testing.T) {
 		buf := make([]PolyRef, 256)
 		n, err := q.GetPathResult(ref, buf, 256)
 
-		if err == detour.ErrFailure {
+		if err == detour.ErrRequestNotFound {
 			// This is fine in some configurations — the path may succeed or fail
 			t.Logf("Path result: n=%d, err=%v", n, err)
 		}

@@ -1,5 +1,10 @@
 package recast
 
+import (
+	"context"
+	"log/slog"
+)
+
 // Constants for layer building.
 const (
 	maxLayersDef = 63
@@ -52,7 +57,7 @@ func overlapRange(amin, amax, bmin, bmax uint16) bool {
 }
 
 // BuildHeightfieldLayers builds layer regions from a compact heightfield.
-func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, walkableHeight int, lset *HeightfieldLayerSet) bool {
+func BuildHeightfieldLayers(ctx context.Context, chf *CompactHeightfield, borderSize, walkableHeight int, lset *HeightfieldLayerSet) error {
 	w := chf.Width
 	h := chf.Height
 
@@ -130,8 +135,8 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 				sweeps[i].id = sweeps[i].nei
 			} else {
 				if regID == 255 {
-					ctx.Log(LogError, "BuildHeightfieldLayers: Region ID overflow.")
-					return false
+					slog.ErrorContext(ctx, "BuildHeightfieldLayers: Region ID overflow.")
+					return ErrRegionIDOverflow
 				}
 				sweeps[i].id = regID
 				regID++
@@ -199,8 +204,8 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 
 						if !addUniqueArray(ri.layers[:], &ri.nlayers, maxLayersDef, lregs[j]) ||
 							!addUniqueArray(rj.layers[:], &rj.nlayers, maxLayersDef, lregs[i]) {
-							ctx.Log(LogError, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
-							return false
+							slog.ErrorContext(ctx, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
+							return ErrLayerOverflow
 						}
 					}
 				}
@@ -257,8 +262,8 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 					regn.layerID = layerID
 					for k := 0; k < int(regn.nlayers); k++ {
 						if !addUniqueArray(root.layers[:], &root.nlayers, maxLayersDef, regn.layers[k]) {
-							ctx.Log(LogError, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
-							return false
+							slog.ErrorContext(ctx, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
+							return ErrLayerOverflow
 						}
 					}
 					root.ymin = minU16(root.ymin, regn.ymin)
@@ -330,8 +335,8 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 					rj.layerID = newID
 					for k := 0; k < int(rj.nlayers); k++ {
 						if !addUniqueArray(ri.layers[:], &ri.nlayers, maxLayersDef, rj.layers[k]) {
-							ctx.Log(LogError, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
-							return false
+							slog.ErrorContext(ctx, "BuildHeightfieldLayers: layer overflow (too many overlapping walkable platforms). Try increasing maxLayersDef.")
+							return ErrLayerOverflow
 						}
 					}
 					ri.ymin = minU16(ri.ymin, rj.ymin)
@@ -363,7 +368,7 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 	}
 
 	if layerID == 0 {
-		return true
+		return nil
 	}
 
 	lw := w - borderSize*2
@@ -487,7 +492,7 @@ func BuildHeightfieldLayers(ctx *Context, chf *CompactHeightfield, borderSize, w
 		}
 	}
 
-	return true
+	return nil
 }
 
 func minU16(a, b uint16) uint16 {

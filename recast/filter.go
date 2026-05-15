@@ -1,16 +1,14 @@
 // Package recast implements navigation mesh generation.
 package recast
 
-import "fmt"
+import (
+	"context"
+)
 
 // FilterLowHangingWalkableObstacles marks non-walkable spans as walkable if their maximum
 // is within walkableClimb of the span below them.
-func FilterLowHangingWalkableObstacles(ctx *Context, walkableClimb int, hf *Heightfield) error {
-	if ctx == nil {
-		return fmt.Errorf("recast: ctx must not be nil")
-	}
-
-	defer ctx.ScopedTimer(TimerFilterLowObstacles)()
+func FilterLowHangingWalkableObstacles(ctx context.Context, walkableClimb int, hf *Heightfield) error {
+	defer ScopedTimer(ctx, TimerFilterLowObstacles)()
 
 	xSize := hf.Width
 	zSize := hf.Height
@@ -42,12 +40,8 @@ func FilterLowHangingWalkableObstacles(ctx *Context, walkableClimb int, hf *Heig
 }
 
 // FilterLedgeSpans marks spans that are ledges as not-walkable.
-func FilterLedgeSpans(ctx *Context, walkableHeight, walkableClimb int, hf *Heightfield) error {
-	if ctx == nil {
-		return fmt.Errorf("recast: ctx must not be nil")
-	}
-
-	defer ctx.ScopedTimer(TimerFilterBorder)()
+func FilterLedgeSpans(ctx context.Context, walkableHeight, walkableClimb int, hf *Heightfield) error {
+	defer ScopedTimer(ctx, TimerFilterBorder)()
 
 	xSize := hf.Width
 	zSize := hf.Height
@@ -141,11 +135,8 @@ func FilterLedgeSpans(ctx *Context, walkableHeight, walkableClimb int, hf *Heigh
 
 // FilterWalkableLowHeightSpans marks walkable spans as not walkable if the clearance above
 // the span is less than the specified walkableHeight.
-func FilterWalkableLowHeightSpans(ctx *Context, walkableHeight int, hf *Heightfield) error {
-	if ctx == nil {
-		return fmt.Errorf("recast: ctx must not be nil")
-	}
-	defer ctx.ScopedTimer(TimerFilterWalkable)()
+func FilterWalkableLowHeightSpans(ctx context.Context, walkableHeight int, hf *Heightfield) error {
+	defer ScopedTimer(ctx, TimerFilterWalkable)()
 
 	xSize := hf.Width
 	zSize := hf.Height

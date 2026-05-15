@@ -1,6 +1,8 @@
 package recast
 
 import (
+	"context"
+	"log/slog"
 	"math"
 	"sort"
 )
@@ -1048,7 +1050,7 @@ func compareDiagDistByDist(diags []PotentialDiagonal) {
 	})
 }
 
-func mergeRegionHoles(ctx *Context, region *ContourRegion) {
+func mergeRegionHoles(ctx context.Context, region *ContourRegion) {
 	for i := 0; i < region.nholes; i++ {
 		mx, mz, lm := findLeftMostVertex(region.holes[i].contour)
 		region.holes[i].minx = mx
@@ -1104,23 +1106,23 @@ func mergeRegionHoles(ctx *Context, region *ContourRegion) {
 		}
 
 		if index == -1 {
-			ctx.Log(LogWarning, "mergeHoles: Failed to find merge points for outline and hole.")
+			slog.WarnContext(ctx, "mergeHoles: Failed to find merge points for outline and hole.")
 			continue
 		}
 		if !mergeContours(outline, hole, index, bestVertex) {
-			ctx.Log(LogWarning, "mergeHoles: Failed to merge contours.")
+			slog.WarnContext(ctx, "mergeHoles: Failed to merge contours.")
 			continue
 		}
 	}
 }
 
 // BuildContours builds and returns a contour set from a compact heightfield.
-func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxEdgeLen int, buildFlags int) *ContourSet {
+func BuildContours(ctx context.Context, chf *CompactHeightfield, maxError float32, maxEdgeLen int, buildFlags int) *ContourSet {
 	w := chf.Width
 	h := chf.Height
 	borderSize := chf.BorderSize
 
-	defer ctx.ScopedTimer(TimerBuildContours)()
+	defer ScopedTimer(ctx, TimerBuildContours)()
 
 	cset := &ContourSet{}
 	cset.Bmin = chf.Bmin
@@ -1145,7 +1147,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 
 	flags := make([]uint8, chf.SpanCount)
 
-	ctx.StartTimer(TimerBuildContoursTrace)
+	StartTimer(ctx, TimerBuildContoursTrace)
 
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
@@ -1174,7 +1176,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 		}
 	}
 
-	ctx.StopTimer(TimerBuildContoursTrace)
+	StopTimer(ctx, TimerBuildContoursTrace)
 
 	verts := make([]int, 0, 256)
 	simplified := make([]int, 0, 64)
@@ -1196,14 +1198,14 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				verts = verts[:0]
 				simplified = simplified[:0]
 
-				ctx.StartTimer(TimerBuildContoursTrace)
+				StartTimer(ctx, TimerBuildContoursTrace)
 				verts = walkContour(x, y, i, chf, flags, verts)
-				ctx.StopTimer(TimerBuildContoursTrace)
+				StopTimer(ctx, TimerBuildContoursTrace)
 
-				ctx.StartTimer(TimerBuildContoursSimplify)
+				StartTimer(ctx, TimerBuildContoursSimplify)
 				simplified = simplifyContour(verts, maxError, maxEdgeLen, buildFlags)
 				simplified = removeDegenerateSegments(simplified)
-				ctx.StopTimer(TimerBuildContoursSimplify)
+				StopTimer(ctx, TimerBuildContoursSimplify)
 
 				if len(simplified)/4 >= 3 {
 					if cset.Nconts >= maxContours {
@@ -1212,7 +1214,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 						newConts := make([]Contour, maxContours)
 						copy(newConts, cset.Conts[:cset.Nconts])
 						cset.Conts = newConts
-						ctx.Log(LogWarning, "BuildContours: Expanding max contours from %d to %d.", oldMax, maxContours)
+						slog.WarnContext(ctx, "BuildContours: expanding max contours", "oldMax", oldMax, "newMax", maxContours)
 					}
 
 					cont := &cset.Conts[cset.Nconts]
@@ -1270,7 +1272,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				cont := cset.Conts[i]
 				if winding[i] > 0 {
 					if regions[cont.Reg].outline != nil {
-						ctx.Log(LogError, "BuildContours: Multiple outlines for region %d.", cont.Reg)
+						slog.ErrorContext(ctx, "BuildContours: multiple outlines for region", "region", cont.Reg)
 					}
 					regions[cont.Reg].outline = &cset.Conts[i]
 				} else {
@@ -1303,7 +1305,7 @@ func BuildContours(ctx *Context, chf *CompactHeightfield, maxError float32, maxE
 				if reg.outline != nil {
 					mergeRegionHoles(ctx, reg)
 				} else {
-					ctx.Log(LogError, "BuildContours: Bad outline for region %d, contour simplification is likely too aggressive.", i)
+					slog.ErrorContext(ctx, "bad outline, contour simplification likely too aggressive", "module", "BuildContours", "region", i)
 				}
 			}
 		}

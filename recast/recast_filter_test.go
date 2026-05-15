@@ -1,11 +1,12 @@
 package recast
 
 import (
+	"context"
 	"testing"
 )
 
 func TestFilterLowHangingWalkableObstacles(t *testing.T) {
-	ctx := &Context{}
+	ctx := context.Background()
 	walkableClimb := 5
 
 	hf := &Heightfield{
@@ -155,7 +156,7 @@ func TestFilterLowHangingWalkableObstacles(t *testing.T) {
 }
 
 func TestFilterLedgeSpans(t *testing.T) {
-	ctx := &Context{}
+	ctx := context.Background()
 	walkableHeight := 10
 	walkableClimb := 5
 
@@ -220,7 +221,7 @@ func TestFilterLedgeSpans(t *testing.T) {
 }
 
 func TestFilterWalkableLowHeightSpans(t *testing.T) {
-	ctx := &Context{}
+	ctx := context.Background()
 	walkableHeight := 5
 
 	hf := &Heightfield{
