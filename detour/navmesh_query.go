@@ -98,7 +98,9 @@ type QueryFilter struct {
 
 // NewQueryFilter creates and initializes a new QueryFilter.
 func NewQueryFilter() *QueryFilter {
-	f := &QueryFilter{}
+	f := &QueryFilter{
+		IncludeFlags: 0xffff,
+	}
 	for i := 0; i < MaxAreas; i++ {
 		f.AreaCost[i] = 1.0
 	}
